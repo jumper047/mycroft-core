@@ -59,7 +59,8 @@ import json
 import os
 import re
 from pathlib import Path
-from threading import Timer
+from queue import Queue
+from threading import Thread, Timer
 
 from mycroft.api import DeviceApi, is_paired
 from mycroft.configuration import Configuration
@@ -137,6 +138,29 @@ def _extract_settings_from_meta(settings_meta: dict) -> dict:
                 fields[field['name']] = field['value']
 
     return fields
+
+
+class SettingsMetaQueue(Thread):
+    def __init__(self):
+        super().__init__()
+        self._queue = Queue()
+        self.daemon = True
+        self.stopped = False
+
+    def run(self):
+        while not self.stopped:
+            uploader = self._queue.get()
+            if uploader is None:
+                break
+            else:
+                uploader.upload()
+
+    def stop(self):
+        self.stopped = True
+        self._queue.put(None)  # Insert dummy value to trigger a loop.
+
+    def put(self, value):
+        self._queue.put(value)
 
 
 class SettingsMetaUploader:

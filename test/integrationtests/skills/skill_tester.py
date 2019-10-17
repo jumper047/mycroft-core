@@ -140,7 +140,7 @@ def load_skills(emitter, skills_root):
         from mycroft.util.log import LOG as skills_log
         buf = StringIO()
         with temporary_handler(skills_log, StreamHandler(buf)):
-            skill_loader = SkillLoader(emitter, path)
+            skill_loader = SkillLoader(emitter, path, None)
             skill_loader.skill_id = skill_id
             skill_loader.load()
             skill_list.append(skill_loader.instance)
