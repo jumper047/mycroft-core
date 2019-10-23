@@ -59,8 +59,8 @@ import json
 import os
 import re
 from pathlib import Path
-from queue import Queue
-from threading import Thread, Timer
+from queue import Queue, Empty
+from threading import Thread, Timer, Event
 
 from mycroft.api import DeviceApi, is_paired
 from mycroft.configuration import Configuration
@@ -146,14 +146,20 @@ class SettingsMetaQueue(Thread):
         self._queue = Queue()
         self.daemon = True
         self.stopped = False
+        self.processed = Event()
 
     def run(self):
+        timeout = 5
         while not self.stopped:
-            uploader = self._queue.get()
-            if uploader is None:
-                break
-            else:
-                uploader.upload()
+            try:
+                uploader = self._queue.get(timeout=timeout)
+                if uploader is None:
+                    break
+                else:
+                    uploader.upload()
+            except Empty:
+                timeout = None
+                self.processed.set()
 
     def stop(self):
         self.stopped = True

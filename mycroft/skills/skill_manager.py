@@ -108,10 +108,18 @@ class SkillManager(Thread):
     def schedule_now(self, _):
         self.skill_updater.next_download = time() - 1
 
+    def _start_settings_update(self):
+        LOG.info('Sending settings meta')
+        self.upload_queue.start()
+        self.upload_queue.processed.wait()
+        LOG.info('All settings meta has been processed or upload has started')
+        self.settings_downloader.download()
+        LOG.info('Skill settings downloading has started')
+
     def handle_paired(self, _):
         """Trigger upload of skills manifest after pairing."""
         self.skill_updater.post_manifest(reload_skills_manifest=True)
-        self.upload_queue.start()
+        self._start_settings_update()
 
     def load_priority(self):
         skills = {skill.name: skill for skill in self.msm.all_skills}
@@ -143,8 +151,7 @@ class SkillManager(Thread):
         # Update sync backend and skills.
         if is_paired():
             self.skill_updater.post_manifest(reload_skills_manifest=True)
-            self.upload_queue.start()
-            self.settings_downloader.download()
+            self._start_settings_update()
 
         # Scan the file folder that contains Skills.  If a Skill is updated,
         # unload the existing version from memory and reload from the disk.
