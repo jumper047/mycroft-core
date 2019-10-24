@@ -141,6 +141,15 @@ def _extract_settings_from_meta(settings_meta: dict) -> dict:
 
 
 class SettingsMetaQueue(Thread):
+    """Queue for sending settings metadata to backend.
+
+    This queue can be used during startup to capture all settingsmeta requests
+    and then processing can be triggered at a later stage.
+
+    After all queued settingsmeta has been processed and the queue is empty
+    the queue will set the self.processed event allowing waiting for
+    processing.
+    """
     def __init__(self):
         super().__init__()
         self._queue = Queue()
@@ -158,14 +167,18 @@ class SettingsMetaQueue(Thread):
                 else:
                     uploader.upload()
             except Empty:
+                # When the queue is empty indicate that everything
+                # sent to it before starting has been processed.
                 timeout = None
                 self.processed.set()
 
     def stop(self):
+        """Stop the queue processer."""
         self.stopped = True
         self._queue.put(None)  # Insert dummy value to trigger a loop.
 
     def put(self, value):
+        """Append a value to the queue."""
         self._queue.put(value)
 
 
