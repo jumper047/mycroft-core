@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright 2017 Mycroft AI Inc.
+# Copyright 2019 Mycroft AI Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,15 +17,23 @@
 
 from mycroft.util.lang.format_common import convert_to_mixed_fraction
 from mycroft.util.log import LOG
-from mycroft.util.lang.common_data_en import _MORPH, _NUM_STRING_RU, \
-    _FRACTION_STRING_RU, _LONG_SCALE_RU, _SHORT_SCALE_RU
+from mycroft.util.lang.common_data_ru import (_NUM_STRING_RU,
+                                              _FRACTION_STRING_RU,
+                                              _SPECIAL_FRACTION_STRING_RU,
+                                              _SHORT_SCALE_FRACTION_STRING_RU,
+                                              _LONG_SCALE_FRACTION_STRING_RU,
+                                              _SPECIAL_TIME_RU,
+                                              _SPECIAL_MIN_RU,
+                                              _LONG_SCALE_RU,
+                                              _SHORT_SCALE_RU, _HOUR,
+                                              _MIN, _SEC)
 
 
 def nice_number_ru(number, speech, denominators=range(1, 21)):
     """ Russian helper for nice_number
 
     This function formats a float to human understandable functions. Like
-    4.5 becomes "4 с половиной" for speech and "4 1/2" for text
+    4.5 becomes "4 целых одна вторая" for speech and "4 1/2" for text
 
     Args:
         number (int or float): the float to format
@@ -38,41 +46,45 @@ def nice_number_ru(number, speech, denominators=range(1, 21)):
     result = convert_to_mixed_fraction(number, denominators)
     if not result:
         # Give up, just represent as a 3 decimal number
-        return str(round(number, 3))
+        return str(round(number, 3)).replace(".", ",")
 
     whole, num, den = result
 
     if not speech:
         if num == 0:
-            # TODO: Number grouping?  E.g. "1,000,000"
-            return str(whole)
+            return str(whole).replace(".", ",")
         else:
             return '{} {}/{}'.format(whole, num, den)
 
     if num == 0:
         return str(whole)
-    num_str = _NUM_STRING_RU.get(num, str(num))
-    den_str = _FRACTION_STRING_RU[den]
-    num_parse = _MORPH.parse(num_str)[0]
-    den_parse = _MORPH.parse(den_str)[0]
-    if whole == 0:
-        if num == 1 and den < 5:
-            return_string = '{}'.format(den_str)
-        else:
-            return_string = '{} {}'.format(
-                num_parse.inflect({'femn', 'nomn'}).word,
-                den_parse.make_agree_with_number(num).word)
-    elif num == 1 and den < 5:
-        return_string = '{} c {}'.format(whole, den_parse.inflect({'ablt'}))
-    else:
-        return_string = '{} и {} {}'.format(
-            whole,
-            num_parse.inflect({'femn', 'nomn'}).word,
-            den_parse.make_agree_with_number(num).word)
+    return_string = str()
+    # first check some edge cases
+    # fraction with own name - "половина" etc
+    if whole == 0 and num == 1 and den <= 4:
+        return '{}'.format(_SPECIAL_FRACTION_STRING_RU[den])
+
+    # another edge case with special word
+    if whole != 0 and num == 1 and den == 2:
+        return '{} с половиной'.format(whole)
+
+    # third case - "четверть"
+    if den == 4:
+        return '{}{} {}'.format(str(whole) + " и " if whole else "", num,
+                                "четверть" if num == 1 else "четверти")
+
+    # general case
+    return_string += '{}'.format(str(whole) + " и " if whole != 0 else "")
+
+    den_str = (_FRACTION_STRING_RU[den].singular
+               if num == 1 else _FRACTION_STRING_RU[den].plural)
+    return_string += '{} {}'.format(num, den_str)
+
     return return_string
 
 
-def pronounce_number_en(num, places=2, short_scale=True, scientific=False):
+def pronounce_number_ru(num, places=2, short_scale=True, scientific=False,
+                        *, gender='masculine'):
     """
     Convert a number to its spoken equivalent
 
@@ -87,109 +99,114 @@ def pronounce_number_en(num, places=2, short_scale=True, scientific=False):
     Returns:
         (str): The pronounced number
     """
-    # FIXME: Completely wrong
     if scientific:
         number = '%E' % num
         n, power = number.replace("+", "").split("E")
         power = int(power)
         if power != 0:
+
             # This handles negatives of powers separately from the normal
             # handling since each call disables the scientific flag
-            return '{}{} times ten to the power of {}{}'.format(
-                'negative ' if float(n) < 0 else '',
-                pronounce_number_en(abs(float(n)), places, short_scale, False),
-                'negative ' if power < 0 else '',
-                pronounce_number_en(abs(power), places, short_scale, False))
+            # TODO may be improve form later?
+            return '{}{} на десять в степени {}{}'.format(
+                'минус ' if float(n) < 0 else '',
+                pronounce_number_ru(abs(float(n)), places, short_scale, False),
+                'минус ' if power < 0 else '',
+                pronounce_number_ru(abs(power), places, short_scale, False))
+
     if short_scale:
         number_names = _NUM_STRING_RU.copy()
         number_names.update(_SHORT_SCALE_RU)
+        fractions = _FRACTION_STRING_RU.copy()
+        fractions.update(_SHORT_SCALE_FRACTION_STRING_RU)
     else:
         number_names = _NUM_STRING_RU.copy()
         number_names.update(_LONG_SCALE_RU)
+        fractions = _FRACTION_STRING_RU.copy()
+        fractions.update(_LONG_SCALE_FRACTION_STRING_RU)
 
     digits = [number_names[n] for n in range(0, 20)]
 
     tens = [number_names[n] for n in range(10, 100, 10)]
 
+    hundreds = [number_names[n] for n in range(100, 1000, 100)]
+
     if short_scale:
-        hundreds = [_SHORT_SCALE_EN[n] for n in _SHORT_SCALE_EN.keys()]
+        thousands = [_SHORT_SCALE_RU[n] for n in _SHORT_SCALE_RU.keys()]
     else:
-        hundreds = [_LONG_SCALE_EN[n] for n in _LONG_SCALE_EN.keys()]
+        thousands = [_LONG_SCALE_RU[n] for n in _LONG_SCALE_RU.keys()]
 
     # deal with negatives
     result = ""
     if num < 0:
-        result = "negative " if scientific else "minus "
+        result = "минус "
     num = abs(num)
 
-    try:
-        # deal with 4 digits
-        # usually if it's a 4 digit num it should be said like a date
-        # i.e. 1972 => nineteen seventy two
-        if len(str(num)) == 4 and isinstance(num, int):
-            _num = str(num)
-            # deal with 1000, 2000, 2001, 2100, 3123, etc
-            # is skipped as the rest of the
-            # functin deals with this already
-            if _num[1:4] == '000' or _num[1:3] == '00' or int(_num[0:2]) >= 20:
-                pass
-            # deal with 1900, 1300, etc
-            # i.e. 1900 => nineteen hundred
-            elif _num[2:4] == '00':
-                first = number_names[int(_num[0:2])]
-                last = number_names[100]
-                return first + " " + last
-            # deal with 1960, 1961, etc
-            # i.e. 1960 => nineteen sixty
-            #      1961 => nineteen sixty one
-            else:
-                first = number_names[int(_num[0:2])]
-                if _num[3:4] == '0':
-                    last = number_names[int(_num[2:4])]
-                else:
-                    second = number_names[int(_num[2:3]) * 10]
-                    last = second + " " + number_names[int(_num[3:4])]
-                return first + " " + last
-    # exception used to catch any unforseen edge cases
-    # will default back to normal subroutine
-    except Exception as e:
-        LOG.error('Exception in pronounce_number_en: {}' + repr(e))
-
     # check for a direct match
-    if num in number_names:
-        if num > 90:
-            result += "one "
-        result += number_names[num]
+    if num in [digit.number for digit in digits + tens + hundreds]:
+        result += number_names[int(num)].masculine if gender == 'masculine' \
+            else number_names[int(num)].feminine
+
+    elif num in [digit.number for digit in thousands]:
+        result += ("одна {}" if num == 1000
+                   else "один {}").format(number_names[int(num)].nomn)
+    # check for overflowing
+    elif int(num) > thousands[-1].number:
+        result += " бесконечность"
     else:
 
         def _sub_thousand(n):
             assert 0 <= n <= 999
             if n <= 19:
-                return digits[n]
+                digits_list = [digits[n]]
             elif n <= 99:
                 q, r = divmod(n, 10)
-                return tens[q - 1] + (" " + _sub_thousand(r) if r else "")
+                digits_list = [tens[q - 1]]
+                if r:
+                    digits_list.extend(_sub_thousand(r))
             else:
                 q, r = divmod(n, 100)
-                return digits[q] + " hundred" + (" and " +
-                                                 _sub_thousand(r) if r else "")
+                digits_list = [hundreds[q - 1]]
+                if r:
+                    digits_list.extend(_sub_thousand(r))
+            return digits_list
 
         def _short_scale(n):
-            if n >= max(_SHORT_SCALE_EN.keys()):
-                return "infinity"
-            n = int(n)
-            assert 0 <= n
-            res = []
-            for i, z in enumerate(_split_by(n, 1000)):
-                if not z:
-                    continue
-                number = _sub_thousand(z)
-                if i:
-                    number += " "
-                    number += hundreds[i]
-                res.append(number)
+            with_fraction = n != int(n) and places > 0
 
-            return ", ".join(reversed(res))
+            n = int(n)
+            assert 0 <= n <= thousands[-1].number
+            num_list = []
+            for i, z in enumerate(_split_by(n, 1000), -1):
+                if z == 0:
+                    continue
+                num_str = ""
+                subnum_list = _sub_thousand(z)
+                for entity in subnum_list:
+
+                    if i == 0 or (i == -1 and (with_fraction or
+                                               gender == 'feminine')):
+                        num_str += " " + entity.feminine
+                    else:
+                        num_str += " " + entity.masculine
+
+                # order ending
+                if i != -1:
+                    if subnum_list[-1].number == 1:
+                        num_str += " " + thousands[i].nomn
+                    elif subnum_list[-1].number < 5:
+                        num_str += " " + thousands[i].gen
+                    else:
+                        num_str += " " + thousands[i].gen_plur
+
+                num_list.append(num_str.strip())
+
+            if with_fraction:
+                postfix = " целая" if n % 10 == 1 else " целых"
+            else:
+                postfix = ""
+
+            return ", ".join(reversed(num_list)) + postfix
 
         def _split_by(n, split=1000):
             assert 0 <= n
@@ -199,42 +216,63 @@ def pronounce_number_en(num, places=2, short_scale=True, scientific=False):
                 res.append(r)
             return res
 
+        def _denum_str(n):
+            order = 10 ** len(str(n))
+            last_plural = True if n % 10 > 1 else False
+            assert order <= 1e60  # max value in dict
+            den_str = ""
+            prefix = ""
+            prefixes = ["стотысяче", "десятитысяче", "тысяче", "сто", "десяти"]
+            while prefixes:
+                if order in fractions:
+                    den_str = fractions[order].plural if last_plural \
+                        else fractions[order].singular
+                    return prefix + den_str
+                prefix = prefixes.pop()
+
+                order -= 1
+
         def _long_scale(n):
-            if n >= max(_LONG_SCALE_EN.keys()):
-                return "infinity"
+            with_fraction = n != int(n) and places > 0
             n = int(n)
-            assert 0 <= n
+            assert 0 <= n <= thousands[-1].number
             res = []
-            for i, z in enumerate(_split_by(n, 1000000)):
+            for i, z in enumerate(_split_by(n, 1000000), -1):
                 if not z:
                     continue
-                number = pronounce_number_en(z, places, True, scientific)
-                # strip off the comma after the thousand
-                if i:
+                number = pronounce_number_ru(z, places, True, scientific)
+                if i >= 0:
                     # plus one as we skip 'thousand'
                     # (and 'hundred', but this is excluded by index value)
-                    number = number.replace(',', '')
-                    number += " " + hundreds[i + 1]
+                    if z % 10 == 1:
+                        thousand_name = thousands[i + 1].nomn
+                    elif 1 < z % 10 < 5:
+                        thousand_name = thousands[i + 1].gen
+                    else:
+                        thousand_name = thousands[i + 1].gen_plur
+                    number += " " + thousand_name
                 res.append(number)
-            return ", ".join(reversed(res))
+            num_str = ", ".join(reversed(res))
+            if with_fraction:
+                num_str += " целая" if int(n) % 10 == 1 else " целых"
+            return num_str
 
         if short_scale:
             result += _short_scale(num)
         else:
             result += _long_scale(num)
 
-    # Deal with fractional part
-    if not num == int(num) and places > 0:
-        result += " point"
-        place = 10
-        while int(num * place) % 10 > 0 and places > 0:
-            result += " " + number_names[int(num * place) % 10]
-            place *= 10
-            places -= 1
+        # Deal with fractional part
+        if num != int(num) and places > 0:
+            fract = int(str(round(num, places)).split(".")[1])
+            fract_num_str = pronounce_number_ru(fract, gender='feminine')
+            fract_postfix = _denum_str(fract)
+            result += ", " + fract_num_str + " " + fract_postfix
+
     return result
 
 
-def nice_time_en(dt, speech=True, use_24hour=False, use_ampm=False):
+def nice_time_ru(dt, speech=True, use_24hour=False, use_ampm=False):
     """
     Format a time to a comfortable human format
 
@@ -269,49 +307,64 @@ def nice_time_en(dt, speech=True, use_24hour=False, use_ampm=False):
     if use_24hour:
         speak = ""
 
-        # Either "0 8 hundred" or "13 hundred"
-        if string[0] == '0':
-            speak += pronounce_number_en(int(string[0])) + " "
-            speak += pronounce_number_en(int(string[1]))
+        hour = int(string[1]) if string[0] == 0 else int(string[0:2])
+        # special hours
+        if hour == 1:
+            speak += "час"
         else:
-            speak = pronounce_number_en(int(string[0:2]))
+            speak += pronounce_number_ru(hour, gender='masculine')
 
-        speak += " "
         if string[3:5] == '00':
-            speak += "hundred"
+            speak += " ноль ноль"
         else:
-            if string[3] == '0':
-                speak += pronounce_number_en(0) + " "
-                speak += pronounce_number_en(int(string[4]))
+            speak += " "
+            if string[3] == "0":
+                speak += "ноль "
+                minute = int(string[4])
             else:
-                speak += pronounce_number_en(int(string[3:5]))
+                minute = int(string[3:5])
+            speak += pronounce_number_ru(minute, gender='feminine')
+        if speak == "тринадцать две":
+            __import__("pdb").set_trace()
+
         return speak
     else:
-        if dt.hour == 0 and dt.minute == 0:
-            return "midnight"
-        if dt.hour == 12 and dt.minute == 0:
-            return "noon"
-        # TODO: "half past 3", "a quarter of 4" and other idiomatic times
+        hour_12 = dt.hour - 12 if dt.hour > 12 else dt.hour
+        if dt.hour == 0 and dt.minute == 0 and not use_ampm:
+            return "полночь"
+        elif dt.hour == 12 and dt.minute == 0 and not use_ampm:
+            return "полдень"
+        elif dt.minute in [5, 10, 15] and not use_ampm:
+            speak = pronounce_number_ru(dt.minute)
+            speak += " минут " + _SPECIAL_TIME_RU[hour_12]
+            return speak
+        elif dt.minute in _SPECIAL_MIN_RU and not use_ampm:
+            return _SPECIAL_MIN_RU[dt.minute] + " " + \
+                pronounce_number_ru((hour_12 + 1) % 12)
+        elif dt.minute == 30 and not use_ampm:
+            return "половина " + _SPECIAL_TIME_RU[hour_12]
+        elif dt.minute == 0 and not use_ampm:
+            return "ровно " + pronounce_number_ru(hour_12) \
+                if dt.hour not in [1, 13] else "ровно час"
 
         if dt.hour == 0:
-            speak = pronounce_number_en(12)
+            speak = pronounce_number_ru(12)
+        elif dt.hour in [1, 13]:
+            speak = "час"
         elif dt.hour < 13:
-            speak = pronounce_number_en(dt.hour)
+            speak = pronounce_number_ru(dt.hour)
         else:
-            speak = pronounce_number_en(dt.hour - 12)
+            speak = pronounce_number_ru(dt.hour - 12)
 
-        if dt.minute == 0:
-            if not use_ampm:
-                return speak + " o'clock"
-        else:
-            if dt.minute < 10:
-                speak += " oh"
-            speak += " " + pronounce_number_en(dt.minute)
+        speak += " "
+        if dt.minute < 10:
+            speak += "ноль "
+        speak += pronounce_number_ru(dt.minute, gender='feminine')
 
         if use_ampm:
             if dt.hour > 11:
-                speak += " p.m."
+                speak += " после полудня"
             else:
-                speak += " a.m."
+                speak += " до полудня"
 
         return speak

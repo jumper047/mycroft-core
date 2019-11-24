@@ -32,27 +32,28 @@ NUMBERS_FIXTURE_RU = {
     12345.67890: '12345,679',
     0.027: '0,027',
     0.5: 'половина',
-    1.333: '1 целая и 1 треть',
-    2.666: '2 целых 2 трети',
+    0.333: 'треть',
+    1.333: '1 и 1 третья',
+    2.666: '2 и 2 третьих',
     0.25: 'четверть',
-    1.25: '1 целая и 1 четверть',
+    1.25: '1 и 1 четверть',
     0.75: '3 четверти',
-    1.75: '1 целая и 3 четверти',
-    3.4: '3 целых и 2 пятых',
-    16.8333: '16 целых и 5 шестых',
-    12.5714: '12 целых 4 седьмых',
-    9.625: '9 целых и 5 восьмых',
-    6.777: '6 целых и 7 девятых',
-    3.1: '3 целых и 1 десятая',
-    2.272: '2 целых и 3 одинадцатых',
-    5.583: '5 целых и 7 двенадцатых',
-    8.384: '8 целых и 5 тринадцатых',
+    1.75: '1 и 3 четверти',
+    3.4: '3 и 2 пятых',
+    16.8333: '16 и 5 шестых',
+    12.5714: '12 и 4 седьмых',
+    9.625: '9 и 5 восьмых',
+    6.777: '6 и 7 девятых',
+    3.1: '3 и 1 десятая',
+    2.272: '2 и 3 одинадцатых',
+    5.583: '5 и 7 двенадцатых',
+    8.384: '8 и 5 тринадцатых',
     0.071: '1 четырнадцатая',
-    6.466: '6 целых и 7 пятнадцатых',
-    8.312: '8 целых и 5 шестнадцатых',
-    2.176: '2 целых и 3 семнадцатых',
-    200.722: '200 целых и  13 восемнадцатых',
-    7.421: '7 целых 8 девятнадцатых',
+    6.466: '6 и 7 пятнадцатых',
+    8.312: '8 и 5 шестнадцатых',
+    2.176: '2 и 3 семнадцатых',
+    200.722: '200 и 13 восемнадцатых',
+    7.421: '7 и 8 девятнадцатых',
     0.05: '1 двадцатая'
 }
 
@@ -130,59 +131,59 @@ class TestPronounceNumber(unittest.TestCase):
 
     def test_convert_decimals_ru(self):
         self.assertEqual(pronounce_number(1.234),
-                         "одна целая двадцать три сотых")
+                         "одна целая, двадцать три сотых")
         self.assertEqual(pronounce_number(21.234),
-                         "двадцать одна целая двадцать три сотых")
+                         "двадцать одна целая, двадцать три сотых")
         self.assertEqual(pronounce_number(21.234, places=1),
-                         "двадцать одна целая две десятых")
+                         "двадцать одна целая, две десятых")
         self.assertEqual(pronounce_number(21.234, places=0), "двадцать один")
         self.assertEqual(
             pronounce_number(21.234, places=3),
-            "двадцать одна целая двести тридцать четыре тысячных")
+            "двадцать одна целая, двести тридцать четыре тысячных")
         self.assertEqual(
             pronounce_number(21.234, places=4),
-            "двадцать одна целая двести тридцать четыре тысячных")
+            "двадцать одна целая, двести тридцать четыре тысячных")
         self.assertEqual(
             pronounce_number(21.234, places=5),
-            "двадцать одна целая двести тридцать четыре тысячных")
+            "двадцать одна целая, двести тридцать четыре тысячных")
         self.assertEqual(pronounce_number(-1.234),
-                         "минус одна целая двадцать три сотых")
+                         "минус одна целая, двадцать три сотых")
         self.assertEqual(pronounce_number(-21.234),
-                         "минус двадцать одна целая двадцать три сотых")
+                         "минус двадцать одна целая, двадцать три сотых")
         self.assertEqual(pronounce_number(-21.234, places=1),
-                         "минус двадцать одна целая две сотых")
+                         "минус двадцать одна целая, две десятых")
         self.assertEqual(pronounce_number(-21.234, places=0),
                          "минус двадцать один")
         self.assertEqual(
             pronounce_number(-21.234, places=3),
-            "минус двадцать одна целая двести тридцать четыре тысячных")
+            "минус двадцать одна целая, двести тридцать четыре тысячных")
         self.assertEqual(
             pronounce_number(-21.234, places=4),
-            "минус двадцать одна целая двести тридцать четыре тысячных")
+            "минус двадцать одна целая, двести тридцать четыре тысячных")
         self.assertEqual(
             pronounce_number(-21.234, places=5),
-            "минус двадцать одна целая двести тридцать четыре тысячных")
+            "минус двадцать одна целая, двести тридцать четыре тысячных")
 
     def test_convert_scientific_notation_ru(self):
         self.assertEqual(pronounce_number(0, scientific=True), "ноль")
         self.assertEqual(pronounce_number(33, scientific=True),
-                         "три целых и три десятых на десять в степени один")
+                         "три целых, три десятых на десять в степени один")
         self.assertEqual(
-            pronounce_number(299792458, scientific=True),
-            "две целых девяносто девять сотых на десять в степени восемь")
+            pronounce_number(299292458, scientific=True),
+            "две целых, девяносто девять сотых на десять в степени восемь")
         self.assertEqual(
             pronounce_number(299792458, places=6, scientific=True),
-            "две целых девятьсот девяносто семь тысяч девятьсот двадцать пять "
-            "на десять в степени восемь")
+            "две целых, девятьсот девяносто семь тысяч, "
+            "девятьсот двадцать пять миллионных на десять в степени восемь")
         self.assertEqual(
             pronounce_number(1.672e-27, places=3, scientific=True),
-            "одна целая шестьсот семьдесят две тысячных "
+            "одна целая, шестьсот семьдесят две тысячных "
             "на десять в степени минус двадцать семь")
 
     def test_large_numbers_ru(self):
         self.assertEqual(
             pronounce_number(299792458, short_scale=True),
-            "двести девяносто девять миллионов семьсот девяносто две тысячи "
+            "двести девяносто девять миллионов, семьсот девяносто две тысячи, "
             "четыреста пятьдесят восемь")
         self.assertEqual(
             pronounce_number(299792458, short_scale=False),
@@ -191,8 +192,8 @@ class TestPronounceNumber(unittest.TestCase):
         self.assertEqual(
             pronounce_number(100034000000299792458, short_scale=True),
             "сто квинтиллионов, тридцать четыре квадриллиона, "
-            "двести девяносто девять миллионов, семьсот декяносто "
-            "два тысячи, четыреста пятьдесят восемь")
+            "двести девяносто девять миллионов, семьсот девяносто "
+            "две тысячи, четыреста пятьдесят восемь")
         self.assertEqual(
             pronounce_number(100034000000299792458, short_scale=False),
             "сто триллионов, тридцать четыре тысячи биллионов, "
@@ -214,12 +215,12 @@ class TestNiceDateFormat_ru(unittest.TestCase):
     def tearDown(self):
         set_active_lang(self.old_lang)
 
-    def test_convert_times_de(self):
+    def test_convert_times_ru(self):
         dt = datetime.datetime(2017, 1, 31, 13, 22, 3)
 
-        self.assertEqual(nice_time(dt), "один час двадцать две минуты")
+        self.assertEqual(nice_time(dt), "час двадцать две")
         self.assertEqual(nice_time(dt, use_ampm=True),
-                         "один час двадцать две минуты после полудня")
+                         "час двадцать две после полудня")
         self.assertEqual(nice_time(dt, speech=False), "1:22")
         self.assertEqual(nice_time(dt, speech=False, use_ampm=True), "1:22 PM")
         self.assertEqual(nice_time(dt, speech=False, use_24hour=True), "13:22")
@@ -227,14 +228,14 @@ class TestNiceDateFormat_ru(unittest.TestCase):
             nice_time(dt, speech=False, use_24hour=True, use_ampm=True),
             "13:22")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=True),
-                         "тринадцать часов двадцать две минуты")
+                         "тринадцать двадцать две")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=False),
-                         "тринадцать часов двадцать две минуты")
+                         "тринадцать двадцать две")
 
         dt = datetime.datetime(2017, 1, 31, 13, 0, 3)
-        self.assertEqual(nice_time(dt), "один час ровно")
+        self.assertEqual(nice_time(dt), "ровно час")
         self.assertEqual(nice_time(dt, use_ampm=True),
-                         "один час ровно послед полудня")
+                         "час ноль ноль после полудня")
         self.assertEqual(nice_time(dt, speech=False), "1:00")
         self.assertEqual(nice_time(dt, speech=False, use_ampm=True), "1:00 PM")
         self.assertEqual(nice_time(dt, speech=False, use_24hour=True), "13:00")
@@ -242,14 +243,14 @@ class TestNiceDateFormat_ru(unittest.TestCase):
             nice_time(dt, speech=False, use_24hour=True, use_ampm=True),
             "13:00")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=True),
-                         "тринадцать часов ровно")
+                         "тринадцать ноль ноль")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=False),
-                         "тринадцать часов ровно")
+                         "тринадцать ноль ноль")
 
         dt = datetime.datetime(2017, 1, 31, 13, 2, 3)
-        self.assertEqual(nice_time(dt), "один час две минуты")
+        self.assertEqual(nice_time(dt), "час ноль две")
         self.assertEqual(nice_time(dt, use_ampm=True),
-                         "один час две минуты после полудня")
+                         "час ноль две после полудня")
         self.assertEqual(nice_time(dt, speech=False), "1:02")
         self.assertEqual(nice_time(dt, speech=False, use_ampm=True), "1:02 PM")
         self.assertEqual(nice_time(dt, speech=False, use_24hour=True), "13:02")
@@ -257,14 +258,14 @@ class TestNiceDateFormat_ru(unittest.TestCase):
             nice_time(dt, speech=False, use_24hour=True, use_ampm=True),
             "13:02")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=True),
-                         "тринадцать часов две минуты")
+                         "тринадцать ноль две")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=False),
-                         "тринадцать часов две минуты")
+                         "тринадцать ноль две")
 
         dt = datetime.datetime(2017, 1, 31, 0, 2, 3)
-        self.assertEqual(nice_time(dt), "двенадцать часов две минуты")
+        self.assertEqual(nice_time(dt), "двенадцать ноль две")
         self.assertEqual(nice_time(dt, use_ampm=True),
-                         "двенадцать часов две минуты до полудня")
+                         "двенадцать ноль две до полудня")
         self.assertEqual(nice_time(dt, speech=False), "12:02")
         self.assertEqual(nice_time(dt, speech=False, use_ampm=True),
                          "12:02 AM")
@@ -273,14 +274,14 @@ class TestNiceDateFormat_ru(unittest.TestCase):
             nice_time(dt, speech=False, use_24hour=True, use_ampm=True),
             "00:02")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=True),
-                         "ноль часов две минуты")
+                         "ноль ноль две")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=False),
-                         "ноль часов две минуты")
+                         "ноль ноль две")
 
         dt = datetime.datetime(2017, 1, 31, 12, 15, 9)
-        self.assertEqual(nice_time(dt), "двенадцать часов пятнадцать минут")
+        self.assertEqual(nice_time(dt), "пятнадцать минут первого")
         self.assertEqual(nice_time(dt, use_ampm=True),
-                         "двенадцать часов пятнадцать минут после полудня")
+                         "двенадцать пятнадцать после полудня")
         self.assertEqual(nice_time(dt, speech=False), "12:15")
         self.assertEqual(nice_time(dt, speech=False, use_ampm=True),
                          "12:15 PM")
@@ -289,14 +290,14 @@ class TestNiceDateFormat_ru(unittest.TestCase):
             nice_time(dt, speech=False, use_24hour=True, use_ampm=True),
             "12:15")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=True),
-                         "двенадцать часов пятнадцать минут")
+                         "двенадцать пятнадцать")
         self.assertEqual(nice_time(dt, use_24hour=True, use_ampm=False),
-                         "двенадцать часов пятнадцать минут")
+                         "двенадцать пятнадцать")
 
         dt = datetime.datetime(2017, 1, 31, 19, 40, 49)
-        self.assertEqual(nice_time(dt), "семь часов сорок минут")
+        self.assertEqual(nice_time(dt), "семь сорок")
         self.assertEqual(nice_time(dt, use_ampm=True),
-                         "семь часов сорок минут после полудня")
+                         "семь сорок после полудня")
         self.assertEqual(nice_time(dt, speech=False), "7:40")
         self.assertEqual(nice_time(dt, speech=False, use_ampm=True), "7:40 PM")
         self.assertEqual(nice_time(dt, speech=False, use_24hour=True), "19:40")
@@ -310,23 +311,26 @@ class TestNiceDateFormat_ru(unittest.TestCase):
 
         dt = datetime.datetime(2017, 1, 31, 1, 15, 00)
         self.assertEqual(nice_time(dt, use_24hour=True),
-                         "один час пятнадцать минут")
+                         "час пятнадцать")
 
         dt = datetime.datetime(2017, 1, 31, 1, 35, 00)
-        self.assertEqual(nice_time(dt), "один час тридцать пять минут")
+        self.assertEqual(nice_time(dt), "час тридцать пять")
 
         dt = datetime.datetime(2017, 1, 31, 1, 45, 00)
-        self.assertEqual(nice_time(dt), "один час сорок пять минут")
+        self.assertEqual(nice_time(dt), "без пятнадцати два")
 
         dt = datetime.datetime(2017, 1, 31, 4, 50, 00)
-        self.assertEqual(nice_time(dt), "четыре часа пятьдесят минут")
+        self.assertEqual(nice_time(dt), "без десяти пять")
 
         dt = datetime.datetime(2017, 1, 31, 5, 55, 00)
-        self.assertEqual(nice_time(dt), "пять часов пятьдесят пять минут")
+        self.assertEqual(nice_time(dt), "без пяти шесть")
 
         dt = datetime.datetime(2017, 1, 31, 5, 30, 00)
         self.assertEqual(nice_time(dt, use_ampm=True),
-                         "пять часов тридцать минут до полудня")
+                         "пять тридцать до полудня")
+
+        dt = datetime.datetime(2017, 1, 31, 5, 30, 00)
+        self.assertEqual(nice_time(dt), "половина шестого")
 
 
 class TestJoinList_ru(unittest.TestCase):

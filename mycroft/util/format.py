@@ -44,6 +44,9 @@ from mycroft.util.lang.format_es import pronounce_number_es
 from mycroft.util.lang.format_de import nice_number_de
 from mycroft.util.lang.format_de import nice_time_de
 from mycroft.util.lang.format_de import pronounce_number_de
+from mycroft.util.lang.format_ru import nice_number_ru
+from mycroft.util.lang.format_ru import nice_time_ru
+from mycroft.util.lang.format_ru import pronounce_number_ru
 from mycroft.util.lang.format_fr import nice_number_fr
 from mycroft.util.lang.format_fr import nice_time_fr
 from mycroft.util.lang.format_fr import pronounce_number_fr
@@ -300,6 +303,8 @@ def nice_number(number, lang=None, speech=True, denominators=None):
         return nice_number_da(number, speech, denominators)
     elif lang_code == "sv":
         return nice_number_sv(number, speech, denominators)
+    elif lang_code == "ru":
+        return nice_number_ru(number, speech, denominators)
 
     # Default to the raw number for unsupported languages,
     # hopefully the STT engine will pronounce understandably.
@@ -344,6 +349,8 @@ def nice_time(dt, lang=None, speech=True, use_24hour=False,
         return nice_time_pt(dt, speech, use_24hour, use_ampm)
     elif lang_code == "sv":
         return nice_time_sv(dt, speech, use_24hour, use_ampm)
+    elif lang_code == "ru":
+        return nice_time_ru(dt, speech, use_24hour, use_ampm)
 
     # TODO: Other languages
     return str(dt)
@@ -389,6 +396,10 @@ def pronounce_number(number, lang=None, places=2, short_scale=True,
         return pronounce_number_pt(number, places=places)
     elif lang_code == "sv":
         return pronounce_number_sv(number, places=places)
+    elif lang_code == "ru":
+        return pronounce_number_ru(number, places=places,
+                                   short_scale=short_scale,
+                                   scientific=scientific)
 
     # Default to just returning the numeric value
     return str(number)
