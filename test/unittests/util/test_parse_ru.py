@@ -15,69 +15,44 @@
 # limitations under the License.
 #
 import unittest
-from datetime import datetime, time
+# from datetime import datetime, time
 
-from mycroft.util.parse import extract_datetime
-from mycroft.util.parse import extract_number
+# from mycroft.util.parse import extract_datetime
+# from mycroft.util.parse import extract_number
 from mycroft.util.parse import normalize
 
 
 class TestNormalize(unittest.TestCase):
-    def test_articles(self):
-        self.assertEqual(
-            normalize("dies ist der test", lang="de-de", remove_articles=True),
-            "dies ist test")
-        self.assertEqual(
-            normalize("und noch ein Test", lang="de-de", remove_articles=True),
-            "und noch 1 Test")
-        self.assertEqual(
-            normalize("dies ist der Extra-Test",
-                      lang="de-de",
-                      remove_articles=False), "dies ist der Extra-Test")
-
-    def test_extract_number(self):
-        self.assertEqual(extract_number("dies ist der 1. Test", lang="de-de"),
-                         1)
-
-    def test_extractdatetime_de(self):
-        def extractWithFormat(text):
-            date = datetime(2017, 6, 27, 0, 0)
-            [extractedDate, leftover] = extract_datetime(
-                text,
-                date,
-                lang="de-de",
-            )
-            extractedDate = extractedDate.strftime("%Y-%m-%d %H:%M:%S")
-            return [extractedDate, leftover]
-
-        def testExtract(text, expected_date, expected_leftover):
-            res = extractWithFormat(text)
-            self.assertEqual(res[0], expected_date)
-            self.assertEqual(res[1], expected_leftover)
-
-        testExtract(u"setze den frisörtermin auf 5 tage von heute",
-                    "2017-07-02 00:00:00", u"setze frisörtermin")
-
-    def test_extractdatetime_default_de(self):
-        default = time(9, 0, 0)
-        anchor = datetime(2017, 6, 27, 0, 0)
-        res = extract_datetime("lass uns treffen am freitag",
-                               anchor,
-                               lang='de-de',
-                               default_time=default)
-        self.assertEqual(default, res[0].time())
-
     def test_spaces(self):
-        self.assertEqual(normalize("  dies   ist  ein    test", lang="de-de"),
-                         "dies ist 1 test")
-        self.assertEqual(
-            normalize("  dies   ist  ein    test  ", lang="de-de"),
-            "dies ist 1 test")
+        self.assertEqual(normalize("  это   просто  тест", lang="ru-ru"),
+                         "это просто тест")
+        self.assertEqual(normalize("  это просто    тест   ", lang="ru-ru"),
+                         "это просто тест")
+        self.assertEqual(normalize("  это просто один тест ", lang="ru-ru"),
+                         "это просто 1 тест")
 
     def test_numbers(self):
+
+        self.assertEqual(normalize("это один два три тест", lang="ru-ru"),
+                         "это 1 2 3 тест")
         self.assertEqual(
-            normalize("dies ist eins zwei drei test", lang="de-de"),
-            "dies ist 1 2 3 test")
+            normalize("  это четыре пять шесть тест ", lang="ru-ru"),
+            "это 4 5 6 тест")
+        self.assertEqual(
+            normalize("  это семь восемь девять десять тест", lang="ru-ru"),
+            "это 7 8 9 10 тест")
+        self.assertEqual(
+            normalize("это пятьсот одиннадцать двенадцать тест", lang="ru-ru"),
+            "это 500 11 12 тест")
+        self.assertEqual(
+            normalize("тринадцать четырнадцать пятнадцать тест", lang="ru-ru"),
+            "13 14 15 тест")
+        self.assertEqual(
+            normalize("шестнадцать семнадцать восемнадцать тест",
+                      lang="ru-ru"), "16 17 18 тест")
+        self.assertEqual(
+            normalize("а это - девятнадцать двадцать проверка", lang="ru-ru"),
+            "а это 19 20 проверка")
 
 
 if __name__ == "__main__":
