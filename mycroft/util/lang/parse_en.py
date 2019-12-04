@@ -419,7 +419,7 @@ def _extract_whole_number_with_text_en(tokens, short_scale, ordinals):
     fraction function.
 
     Args:
-        tokens [_Token]:
+        token [_Token]:
         short_scale boolean:
         ordinals boolean:
 

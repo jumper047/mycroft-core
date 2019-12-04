@@ -45,6 +45,11 @@ from mycroft.util.lang.parse_da import extractnumber_da
 from mycroft.util.lang.parse_da import extract_numbers_da
 from mycroft.util.lang.parse_da import extract_datetime_da
 from mycroft.util.lang.parse_da import normalize_da
+from mycroft.util.lang.parse_ru import extractnumber_ru
+# from mycroft.util.lang.parse_ru import extract_datetime_ru
+from mycroft.util.lang.parse_ru import extract_numbers_ru
+from mycroft.util.lang.parse_ru import extract_duration_ru
+from mycroft.util.lang.parse_ru import normalize_ru
 
 from .log import LOG
 
@@ -131,6 +136,8 @@ def extract_numbers(text, short_scale=True, ordinals=False, lang=None):
         return extract_numbers_da(text, short_scale, ordinals)
     elif lang_code == "es":
         return extract_numbers_es(text, short_scale, ordinals)
+    elif lang_code == "ru":
+        return extract_numbers_ru(text, short_scale, ordinals)
     return []
 
 
@@ -168,9 +175,12 @@ def extract_number(text, short_scale=True, ordinals=False, lang=None):
         return extractnumber_de(text)
     elif lang_code == "da":
         return extractnumber_da(text)
+    elif lang_code == "ru":
+        return extractnumber_ru(text)
     # TODO: extractnumber_xx for other languages
     _log_unsupported_language(lang_lower,
-                              ['en', 'es', 'pt', 'it', 'fr', 'sv', 'de', 'da'])
+                              ['en', 'es', 'pt', 'it', 'fr',
+                               'sv', 'de', 'da', 'ru'])
     return text
 
 
@@ -204,9 +214,11 @@ def extract_duration(text, lang=None):
 
     if lang_code == "en":
         return extract_duration_en(text)
+    elif lang_code == "ru":
+        return extract_duration_ru(text)
 
     # TODO: extract_duration for other languages
-    _log_unsupported_language(lang_code, ['en'])
+    _log_unsupported_language(lang_code, ['en', 'ru'])
     return None
 
 
@@ -285,7 +297,8 @@ def extract_datetime(text, anchorDate=None, lang=None, default_time=None):
         return extract_datetime_da(text, anchorDate, default_time)
     # TODO: extract_datetime for other languages
     _log_unsupported_language(lang_code,
-                              ['en', 'es', 'pt', 'it', 'fr', 'sv', 'de', 'da'])
+                              ['en', 'es', 'pt', 'it', 'fr',
+                               'sv', 'de', 'da'])
     return text
 
 
@@ -323,9 +336,12 @@ def normalize(text, lang=None, remove_articles=True):
         return normalize_de(text, remove_articles)
     elif lang_code == "da":
         return normalize_da(text, remove_articles)
+    elif lang_code == "ru":
+        return normalize_ru(text, remove_articles)
     # TODO: Normalization for other languages
     _log_unsupported_language(lang_code,
-                              ['en', 'es', 'pt', 'it', 'fr', 'sv', 'de', 'da'])
+                              ['en', 'es', 'pt', 'it', 'fr',
+                               'sv', 'de', 'da', 'ru'])
     return text
 
 
