@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from collections import namedtuple
-from datetime import timedelta  # datetime
+from datetime import timedelta, datetime
 
 import copy
 
@@ -24,7 +24,7 @@ import copy
 from mycroft.util.lang.parse_common import is_numeric  # , look_for_fractions
 from mycroft.util.lang.common_data_ru import (
     _MINUS_RU, _FRACTION_MARKER_RU, _FRACTION_TO_NUM_RU, _ORDINAL_TO_NUM_RU,
-    _STRING_TO_NUM_RU, _STRING_TO_TERM_RU)
+    _STRING_TO_NUM_RU, _STRING_TO_TERM_RU, _SPECIAL_FRACTION_RU, _MAYBE_FRACTION_MARKER_RU)
 
 import re
 
@@ -33,12 +33,6 @@ import re
 # text. To ensure things parse correctly, we need to know where text came
 # from in the original input, hence this nametuple.
 _Token = namedtuple('_Token', 'word index')
-
-_SPECIAL_FRACTION_RU = {
-    0.5: ["половина", "половиной", "половины", "половин"],
-    0.333: ["треть", "трети", "третью", "третей"],
-    0.25: ["четверть", "четверти", "четвертью", "четвертей"]
-}
 
 
 def _revert_dict(dictionary):
@@ -78,6 +72,7 @@ def _is_subthousand(word, short_scale=True, ordinals=False):
         return float(word) < (1000 if short_scale else 1e6)
     else:
         integers = ru_numbers if not ordinals else ru_numbers_ordinals
+        print(word, ordinals, word in ru_numbers_ordinals)
         return word in integers and integers[word] < (1000
                                                       if short_scale else 1e6)
 
@@ -89,8 +84,7 @@ def _is_term(word, short_scale=True, ordinals=False):
     if is_numeric(word):
         return False
     else:
-        terms = ru_numbers if not ordinals else ru_numbers_ordinals
-        return word in terms and terms[word] > (1000 if short_scale else 1e9)
+        return word in ru_terms and ru_terms[word] > (1000 if short_scale else 1e9)
 
 
 def _is_fraction(word):
@@ -113,10 +107,36 @@ def _is_num_special_fraction(word):
     return len(frac) == 2 and is_numeric(frac[0]) and is_numeric(frac[1])
 
 
-def _is_plain_word(word):
+def _is_plain_word(word, ordinals=False):
 
     # TODO add more cases
-    return not (_is_subthousand(word) or _is_term(word) or _is_fraction(word))
+    print("check plain word", word, _is_subthousand(word), _is_term(word), _is_fraction(word),
+          _is_special_fraction(word), _is_num_special_fraction(word), word in _FRACTION_MARKER_RU)
+    return not (_is_subthousand(word, ordinals=ordinals) or _is_term(word) or _is_fraction(word) or
+                _is_special_fraction(word) or _is_num_special_fraction(word) or
+                word in _FRACTION_MARKER_RU)
+
+
+def _different_numbers(word1, word2, short_scale=True, ordinals=False):
+
+    if not _is_subthousand(word1) or not _is_subthousand(word2):
+        return False
+
+    if is_numeric(word1):
+        num1 = int(word1)
+    else:
+        num1 = ru_numbers[word1] if ordinals else ru_numbers_ordinals[word1]
+    if is_numeric(word2):
+        num2 = int(word2)
+    else:
+        num2 = ru_numbers[word2] if ordinals else ru_numbers_ordinals[word2]
+    return num1 < 20 or len(str(num1)) <= len(str(num2))
+
+
+def _is_special_fraction_marker(word_left, word, word_right):
+    print("checking words for special fraction", word_left, word, word_right)
+
+    return (word in _MAYBE_FRACTION_MARKER_RU and (_is_subthousand(word_left) or _is_term(word_left) or is_numeric(word_left)) and (_is_subthousand(word_right) or _is_term(word_right) or _is_special_fraction(word_right) or is_numeric(word_right)))
 
 
 def _extract_integer_short_scale(tokens, ordinals=False):
@@ -126,12 +146,19 @@ def _extract_integer_short_scale(tokens, ordinals=False):
     tmp_result = 0
     for token in tokens:
         if _is_subthousand(token.word, True, ordinals):
-            tmp_result += ru_numbers[
-                token.word] if not ordinals else ru_numbers_ordinals[
-                    token.word]
+            if is_numeric(token.word):
+                tmp_result += int(token.word)
+            elif not ordinals:
+                tmp_result += ru_numbers[token.word]
+            else:
+                tmp_result += ru_numbers_ordinals[token.word]
         elif _is_term(token.word, True, ordinals):
-            result += (tmp_result * ru_terms[token.word]
-                       ) if tmp_result != 0 else ru_terms[token.word]
+            if is_numeric(token.word):
+                num = int(token.word)
+            else:
+                num = ru_terms[token.word]
+            result += (tmp_result * num
+                       ) if tmp_result != 0 else num
             tmp_result = 0
     result += tmp_result
     return result
@@ -160,7 +187,7 @@ def _extract_fraction(tokens, short_scale=True, ordinals=False):
 
     # edge case - "с половиной" etc
     if _is_special_fraction(tokens[-1].word):
-        return _SPECIAL_FRACTION_RU[tokens[-1].word]
+        return ru_special_fraction[tokens[-1].word]
         # TODO add support for fractional parts > 20
     elif _is_fraction(tokens[-1].word):
         return _extract_integer(tokens[:-1], short_scale,
@@ -169,38 +196,61 @@ def _extract_fraction(tokens, short_scale=True, ordinals=False):
         return 0
 
 
-def _extract_tokens_with_numbers(tokens):
+def _extract_tokens_with_numbers(tokens, ordinals=False):
 
     tokens = tokens[:]
+    print("trying to find numbers in ", tokens)
     placeholder = '<placeholder>'
     current_number = []
     numbers = []
     for index, token in enumerate(tokens):
-        if _is_plain_word(token.word) and len(current_number) == 0:
+        if _is_plain_word(token.word, ordinals=ordinals) and len(current_number) == 0:
             # continue going through plain text
+            print(token, " is plain word")
             continue
-        elif _is_plain_word(token.word) and len(current_number) > 0:
+        elif token.word in _MAYBE_FRACTION_MARKER_RU and len(current_number) > 0:
+            if (0 < index < len(tokens) - 1) and _is_special_fraction_marker(tokens[index-1].word, token.word, tokens[index+1].word):
+                current_number.append(token)
+            else:
+                numbers.append(current_number)
+                current_number = []
+        elif _is_plain_word(token.word, ordinals=ordinals) and len(current_number):
             # finalize word
             numbers.append(current_number)
             current_number = []
+            print(token, " is plain word-finalizing")
+        elif index > 0 and _different_numbers(tokens[index-1].word, token.word):
+            numbers.append(current_number)
+            current_number = [token]
+            print(token, " is differernt word")
         else:
             # append token to number
-            current_number.append(tokens.pop(index))
-            tokens.insert(index, placeholder)
+            # current_number.append(tokens.pop(index))
+            # tokens.insert(index, placeholder)
+            print(token, " is part of number")
+            current_number.append(token)
+    if len(current_number):
+        numbers.append(current_number)
+    print("found numbers ", numbers)
     return numbers
 
 
 def _extract_number(tokens, short_scale, ordinals):
 
     tokens = list(tokens)
+    print("extract numbers from ", tokens)
     negative = False
     integer = 0
     fraction = 0
+    if len(tokens) == 0:
+        return None
     if tokens[0].word in _MINUS_RU:
         negative = True
         tokens = tokens[1:]
     words_list = [token.word for token in tokens]
-    for marker in _FRACTION_MARKER_RU:
+    fract = list(_FRACTION_MARKER_RU)
+    fract += _MAYBE_FRACTION_MARKER_RU
+    for marker in fract:
         try:
             marker_index = words_list.index(marker)
             integer = _extract_integer(tokens[:marker_index], short_scale,
@@ -236,7 +286,7 @@ def extractnumber_ru(text, short_scale=True, ordinals=False):
                                    was found
     """
     tokens = _tokenize(text)
-    tok_numbers = _extract_tokens_with_numbers(tokens)
+    tok_numbers = _extract_tokens_with_numbers(tokens, ordinals)
     if len(tok_numbers) == 0:
         return False
     else:
@@ -259,7 +309,7 @@ def extract_numbers_ru(text, short_scale=True, ordinals=False):
     """
 
     tokens = _tokenize(text)
-    tok_numbers = _extract_tokens_with_numbers(tokens)
+    tok_numbers = _extract_tokens_with_numbers(tokens, ordinals)
     if len(tok_numbers) == 0:
         return False
     else:
@@ -334,38 +384,101 @@ def extract_duration_ru(text):
 
     return (duration, ' '.join([t.word for t in rest]))
 
+# через спустя
 
-# def extract_datetime_en(string, dateNow, default_time):
-#     """ Convert a human date reference into an exact datetime
 
-#     Convert things like
-#         "today"
-#         "tomorrow afternoon"
-#         "next Tuesday at 4pm"
-#         "August 3rd"
-#     into a datetime.  If a reference date is not provided, the current
-#     local time is used.  Also consumes the words used to define the date
-#     returning the remaining string.  For example, the string
-#        "what is Tuesday's weather forecast"
-#     returns the date for the forthcoming Tuesday relative to the reference
-#     date and the remainder string
-#        "what is weather forecast".
+def _extract_absolute_date(tokens):
+    # 3е декабря
+    pass
 
-#     The "next" instance of a day or weekend is considered to be no earlier
-#     than
-#     48 hours in the future. On Friday, "next Monday" would be in 3 days.
-#     On Saturday, "next Monday" would be in 9 days.
 
-#     Args:
-#         string (str): string containing date words
-#         dateNow (datetime): A reference date/time for "tommorrow", etc
-#         default_time (time): Time to set if no time was found in the string
+def _extract_interval(words, date_time):
 
-#     Returns:
-#         [datetime, str]: An array containing the datetime and the remaining
-#                          text not consumed in the parsing, or None if no
-#                          date or time related text was found.
-#     """
+    interval_markers = ['через', 'спустя', 'подожди']
+
+    # через бла бла бла после...
+    pass
+
+
+def _extract_relative_day(tokens):
+    offsets = {-2: ["позавчера"],
+               -1: ["вчера"],
+               0: ["сейчас", "сегодня"],
+               1: ["завтра"],
+               2: ["послезавтра", "после завтра"]}
+    offset_words = _revert_dict(offsets)
+    string = " ".join([token.word for token in tokens])
+    for of_word in offset_words:
+        if of_word in string:
+            break
+    else:
+        return None
+    result = offset_words[of_word]
+    if len(of_word.split()) != 1:
+        parsed = of_word.split()
+    else:
+        parsed = [of_word]
+    for word in parsed:
+        for num, token in enumerate(tokens):
+            if word == token.word:
+                tokens.pop(num)
+                break
+    return result
+
+
+def _extract_pronoun_time(tokens):
+    # двадцать часов пятнадцать минут
+    pass
+
+
+def _extract_short_pronoun_time(tokens):
+    # пять [пятнадцать] [утра]
+    pass
+
+
+def _extract_numeric_time(tokens):
+    # 15:25
+    pass
+
+
+def extract_datetime_ru(string, date_now, default_time):
+    """ Convert a human date reference into an exact datetime
+
+    Convert things like
+        "today"
+        "tomorrow afternoon"
+        "next Tuesday at 4pm"
+        "August 3rd"
+    into a datetime.  If a reference date is not provided, the current
+    local time is used.  Also consumes the words used to define the date
+    returning the remaining string.  For example, the string
+       "what is Tuesday's weather forecast"
+    returns the date for the forthcoming Tuesday relative to the reference
+    date and the remainder string
+       "what is weather forecast".
+
+    The "next" instance of a day or weekend is considered to be no earlier
+    than
+    48 hours in the future. On Friday, "next Monday" would be in 3 days.
+    On Saturday, "next Monday" would be in 9 days.
+
+    Args:
+        string (str): string containing date words
+        dateNow (datetime): A reference date/time for "tommorrow", etc
+        default_time (time): Time to set if no time was found in the string
+
+     Returns:
+         [datetime, str]: An array containing the datetime and the remaining
+                          text not consumed in the parsing, or None if no
+                          date or time related text was found.
+    """
+
+    words = string.split()
+    # just check one corner case:
+    if "сейчас" in words:
+        rest = string.replace("сейчас", "", 1)
+        rest = " ".join(rest.split())
+        return [date_now, rest]
 
 
 def normalize_ru(text, remove_articles=True):
