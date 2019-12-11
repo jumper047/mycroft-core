@@ -387,17 +387,112 @@ def extract_duration_ru(text):
 # через спустя
 
 
+def _extract_now(words, current_dt):
+
+    offset = {
+        'microseconds': 0,
+        'milliseconds': 0,
+        'seconds': 0,
+        'minutes': 0,
+        'hours': 0,
+        'days': 0,
+        'weeks': 0,
+        'years': 0
+    }
+
+    if "сейчас" in words:
+        return (offset, [words.index("сейчас")], True)
+    else:
+        return None
+
+
 def _extract_absolute_date(tokens):
     # 3е декабря
     pass
 
 
-def _extract_interval(words, date_time):
+def _extract_interval(words, current_dt):
 
     interval_markers = ['через', 'спустя', 'подожди']
+    parsed_positions = []
+    norm_words = []
 
-    # через бла бла бла после...
-    pass
+    # replace some words peculiar to intervals
+    for word in words:
+        if word in ["пара", "пару"]:
+            norm_words.append("2")
+        else:
+            norm_words.append(word)
+
+    for marker in interval_markers:
+        if marker in norm_words:
+            parsed_positions.append(norm_words.index(marker))
+            break
+    else:
+        return None
+
+    enough = False
+
+    offset = {
+        'microseconds': 0,
+        'milliseconds': 0,
+        'seconds': 0,
+        'minutes': 0,
+        'hours': 0,
+        'days': 0,
+        'weeks': 0,
+        'years': 0
+    }
+
+    time_words = {
+        'microseconds': ['микросекунд', 'микросекунду', 'микросекунд'],
+        'milliseconds': ['миллисекунды', 'миллисекунду', 'миллисекунд'],
+        'seconds': ['секунду', 'секунды', 'секунд'],
+        'minutes': ['минуту', 'минут', 'минуты'],
+        'hours': ['час', 'часа', 'часов'],
+        'days': ['день', 'дня', 'дней'],
+        'weeks': ['недель', 'недели', 'неделю'],
+        'years': ['год', 'года', 'лет'],
+        'decade': ['десятилетие', 'десятилетия', 'десятилетий'],
+        'century': ['столетие', 'столетия', 'столетий'],
+        'millenium': ['тысячелетие', 'тысячелетия', 'тысячелетий']
+    }
+
+    time_words_r = _revert_dict(time_words)
+
+    last_index = 0
+
+    for index, word in enumerate(norm_words):
+        if word in time_words_r:
+            last_index = index
+            parsed_positions.append(index)
+            number_words = []
+            for rev_idx in range(index - 1, -1, -1):
+                if not _is_plain_word(norm_words[rev_idx]):
+                    number_words.append(norm_words[rev_idx])
+                    parsed_positions.append(rev_idx)
+            number = extractnumber_ru(" ".join(number_words))
+
+            if number is False:
+                number = 1
+
+            if time_words_r[word] == 'decade':
+                offset['years'] += number * 10
+            elif time_words_r[word] == 'century':
+                offset['years'] += number * 100
+            elif time_words_r[word] == 'millenium':
+                offset['years'] += number * 1000
+            elif time_words_r[word] == 'minutes':
+                offset['seconds'] += number * 60
+            else:
+                offset[time_words_r[word]] += number
+
+    if len(norm_words) > last_index + 1 and norm_words[last_index + 1] == 'после':
+        parsed_positions.append(last_index + 1)
+    else:
+        enough = True
+
+    return (offset, parsed_positions, enough)
 
 
 def _extract_relative_day(tokens):
@@ -474,11 +569,43 @@ def extract_datetime_ru(string, date_now, default_time):
     """
 
     words = string.split()
-    # just check one corner case:
-    if "сейчас" in words:
-        rest = string.replace("сейчас", "", 1)
-        rest = " ".join(rest.split())
-        return [date_now, rest]
+
+    offset = {
+        'microseconds': 0,
+        'milliseconds': 0,
+        'seconds': 0,
+        'minutes': 0,
+        'hours': 0,
+        'days': 0,
+        'weeks': 0,
+        'years': 0
+    }
+
+    def update_offset(off):
+        nonlocal offset
+        for t in offset:
+            offset[t] += off[t]
+
+    def strip_words(numbers):
+        nonlocal words
+        words = [word for ind, word in enumerate(words) if ind not in numbers]
+
+    def calculate_dt():
+        nonlocal date_now, offset
+        years = offset['years']
+        delta_args = {name: value for name,
+                      value in offset.items() if name != 'years'}
+        return date_now + timedelta(**delta_args)
+
+    extractors = [_extract_now, _extract_interval]
+    for function in extractors:
+        result = function(words, date_now)
+        if result is not None:
+            update_offset(result[0])
+            strip_words(result[1])
+            if result[2]:
+                return [calculate_dt(), " ".join(words)]
+    return [calculate_dt(), " ".join[words]]
 
 
 def normalize_ru(text, remove_articles=True):
