@@ -17,6 +17,8 @@
 from collections import namedtuple
 from datetime import timedelta, datetime
 
+from dateutil.relativedelta import relativedelta
+
 import copy
 
 # from dateutil.relativedelta import relativedelta
@@ -72,7 +74,6 @@ def _is_subthousand(word, short_scale=True, ordinals=False):
         return float(word) < (1000 if short_scale else 1e6)
     else:
         integers = ru_numbers if not ordinals else ru_numbers_ordinals
-        print(word, ordinals, word in ru_numbers_ordinals)
         return word in integers and integers[word] < (1000
                                                       if short_scale else 1e6)
 
@@ -110,8 +111,6 @@ def _is_num_special_fraction(word):
 def _is_plain_word(word, ordinals=False):
 
     # TODO add more cases
-    print("check plain word", word, _is_subthousand(word), _is_term(word), _is_fraction(word),
-          _is_special_fraction(word), _is_num_special_fraction(word), word in _FRACTION_MARKER_RU)
     return not (_is_subthousand(word, ordinals=ordinals) or _is_term(word) or _is_fraction(word) or
                 _is_special_fraction(word) or _is_num_special_fraction(word) or
                 word in _FRACTION_MARKER_RU)
@@ -134,7 +133,6 @@ def _different_numbers(word1, word2, short_scale=True, ordinals=False):
 
 
 def _is_special_fraction_marker(word_left, word, word_right):
-    print("checking words for special fraction", word_left, word, word_right)
 
     return (word in _MAYBE_FRACTION_MARKER_RU and (_is_subthousand(word_left) or _is_term(word_left) or is_numeric(word_left)) and (_is_subthousand(word_right) or _is_term(word_right) or _is_special_fraction(word_right) or is_numeric(word_right)))
 
@@ -199,14 +197,12 @@ def _extract_fraction(tokens, short_scale=True, ordinals=False):
 def _extract_tokens_with_numbers(tokens, ordinals=False):
 
     tokens = tokens[:]
-    print("trying to find numbers in ", tokens)
     placeholder = '<placeholder>'
     current_number = []
     numbers = []
     for index, token in enumerate(tokens):
         if _is_plain_word(token.word, ordinals=ordinals) and len(current_number) == 0:
             # continue going through plain text
-            print(token, " is plain word")
             continue
         elif token.word in _MAYBE_FRACTION_MARKER_RU and len(current_number) > 0:
             if (0 < index < len(tokens) - 1) and _is_special_fraction_marker(tokens[index-1].word, token.word, tokens[index+1].word):
@@ -218,27 +214,22 @@ def _extract_tokens_with_numbers(tokens, ordinals=False):
             # finalize word
             numbers.append(current_number)
             current_number = []
-            print(token, " is plain word-finalizing")
         elif index > 0 and _different_numbers(tokens[index-1].word, token.word):
             numbers.append(current_number)
             current_number = [token]
-            print(token, " is differernt word")
         else:
             # append token to number
             # current_number.append(tokens.pop(index))
             # tokens.insert(index, placeholder)
-            print(token, " is part of number")
             current_number.append(token)
     if len(current_number):
         numbers.append(current_number)
-    print("found numbers ", numbers)
     return numbers
 
 
 def _extract_number(tokens, short_scale, ordinals):
 
     tokens = list(tokens)
-    print("extract numbers from ", tokens)
     negative = False
     integer = 0
     fraction = 0
@@ -421,6 +412,8 @@ def _extract_interval(words, current_dt):
     for word in words:
         if word in ["пара", "пару"]:
             norm_words.append("2")
+        elif word == 'пол':
+            norm_words.append("половина")
         else:
             norm_words.append(word)
 
@@ -433,16 +426,7 @@ def _extract_interval(words, current_dt):
 
     enough = False
 
-    offset = {
-        'microseconds': 0,
-        'milliseconds': 0,
-        'seconds': 0,
-        'minutes': 0,
-        'hours': 0,
-        'days': 0,
-        'weeks': 0,
-        'years': 0
-    }
+    offset = dict()
 
     time_words = {
         'microseconds': ['микросекунд', 'микросекунду', 'микросекунд'],
@@ -452,6 +436,7 @@ def _extract_interval(words, current_dt):
         'hours': ['час', 'часа', 'часов'],
         'days': ['день', 'дня', 'дней'],
         'weeks': ['недель', 'недели', 'неделю'],
+        'months': ['месяцев', 'месяца', 'месяц'],
         'years': ['год', 'года', 'лет'],
         'decade': ['десятилетие', 'десятилетия', 'десятилетий'],
         'century': ['столетие', 'столетия', 'столетий'],
@@ -477,15 +462,15 @@ def _extract_interval(words, current_dt):
                 number = 1
 
             if time_words_r[word] == 'decade':
-                offset['years'] += number * 10
+                offset['years'] = offset.get('years', 0) + number * 10
             elif time_words_r[word] == 'century':
-                offset['years'] += number * 100
+                offset['years'] = offset.get('years', 0) + number * 100
             elif time_words_r[word] == 'millenium':
-                offset['years'] += number * 1000
+                offset['years'] = offset.get('years', 0) + number * 1000
             elif time_words_r[word] == 'minutes':
-                offset['seconds'] += number * 60
+                offset['seconds'] = offset.get('seconds', 0) + number * 60
             else:
-                offset[time_words_r[word]] += number
+                offset[time_words_r[word]] = offset.get(time_words_r[word], 0) + number
 
     if len(norm_words) > last_index + 1 and norm_words[last_index + 1] == 'после':
         parsed_positions.append(last_index + 1)
@@ -494,14 +479,88 @@ def _extract_interval(words, current_dt):
 
     return (offset, parsed_positions, enough)
 
+def _extract_next_term(words, current_dt):
+
+    offset = dict()
+    next_word = ['следующее', 'следующий', 'следующем', 'следующей']
+    prev_word = ['прошлый', 'прошлое', 'прошлая', 'прошлую', 'прошлые', 'том', 'той', 'та', 'тот', 'тех']
+    time_words = {
+        'microseconds': ['микросекунда', 'микросекунду', 'микросекунд','микросекунда'],
+        'milliseconds': ['миллисекунды', 'миллисекунду', 'миллисекунда', 'миллисекунд'],
+        'seconds': ['секунду', 'секунды', 'секунд', 'секунда'],
+        'minutes': ['минуту', 'минут', 'минуты','минута'],
+        'hours': ['час', 'часа', 'часов', 'часу'],
+        'days': ['день', 'дня', 'дней', 'час'],
+        'weeks': ['недель', 'недели', 'неделю', 'неделя', 'неделе'],
+        'months': ['месяцев', 'месяца', 'месяц', 'месяцу', 'месяце'],
+        'years': ['год', 'года', 'лет', 'году'],
+        'decade': ['десятилетие', 'десятилетия', 'десятилетий', 'десятилетии'],
+        'century': ['столетие', 'столетия', 'столетий', 'столетии'],
+        'millenium': ['тысячелетие', 'тысячелетия', 'тысячелетий', 'тысячелетии']
+    }
+
+    time_words_r = _revert_dict(time_words)
+
+    for num, word in enumerate(words):
+        if word in next_word and len(words) > num + 1 and words[num+1] in time_words_r:
+            nword = words[num+1]
+            if time_words_r[nword] == 'decade':
+                offset['years'] = 10
+            elif time_words_r[nword] == 'century':
+                offset['years'] = 100
+            elif time_words_r[nword] == 'millenium':
+                offset['years'] = 1000
+            elif time_words_r[nword] == 'minutes':
+                offset['seconds'] = 60
+            else:
+                offset[time_words_r[nword]] = 1
+            return (offset, [num, num + 1], False)
+
+        elif word in prev_word and len(words) > num and words[num+1] in time_words_r:
+            nword = words[num+1]
+            if time_words_r[nword] not in ['weeks', 'years', 'decade',
+                                           'century', 'millenium']:
+                return None
+            nword = words[num+1]
+            if time_words_r[nword] == 'decade':
+                offset['years'] = -10
+            elif time_words_r[nword] == 'century':
+                offset['years'] = -100
+            elif time_words_r[nword] == 'millenium':
+                offset['years'] = -1000
+            else:
+                offset[time_words_r[nword]] = -1
+
+
+            return (offset, [num, num + 1], False)
+    return None
+
+
+def _extract_weekday(words, current_dt):
+
+    weekdays = {'monday': ["понедельник", "понедельника", "понедельнику"],
+                'tuesday': ["вторник", "вторника", "вторнику"],
+                'wednsday': ["среда", "среду", "среды"],
+                'thursday': ["четверг", "четверга", "четвергу"],
+                'friday': ["пятница", "пятницу", "пятницы"],
+                'saturday': ["суббота", "субботу", "субботы"],
+                'sunday': ["воскресенье", "воскресенья", "воскресенью"]}
+
+    offsets = {-2: ["позапрошлый", "позапрошлого", "позапрошлому"],
+               -1: ["прошлый", "прошлого", "прошлому"],
+               0: ["этот"],
+               1: ["следующий", "следующая", "следующую"]}
+
+
+    offset = dict()
+
 
 def _extract_relative_day(tokens):
-    offsets = {-2: ["позавчера"],
-               -1: ["вчера"],
-               0: ["сейчас", "сегодня"],
-               1: ["завтра"],
-               2: ["послезавтра", "после завтра"]}
-    offset_words = _revert_dict(offsets)
+    offsets = {"позавчера": -2,
+               "вчера": -1,
+               "сегодня": 0,
+               "завтра": 1,
+               "послезавтра": 2}
     string = " ".join([token.word for token in tokens])
     for of_word in offset_words:
         if of_word in string:
@@ -571,20 +630,26 @@ def extract_datetime_ru(string, date_now, default_time):
     words = string.split()
 
     offset = {
-        'microseconds': 0,
-        'milliseconds': 0,
-        'seconds': 0,
-        'minutes': 0,
-        'hours': 0,
-        'days': 0,
-        'weeks': 0,
-        'years': 0
+        'microseconds': None,
+        'milliseconds': None,
+        'seconds': None,
+        'minutes': None,
+        'hours': None,
+        'days': None,
+        'weeks': None,
+        'months': None,
+        'years': None
     }
 
     def update_offset(off):
         nonlocal offset
         for t in offset:
-            offset[t] += off[t]
+            if t not in off:
+                continue
+            if offset[t] is not None:
+                offset[t] += off[t]
+            else:
+                offset[t] = off[t]
 
     def strip_words(numbers):
         nonlocal words
@@ -592,21 +657,57 @@ def extract_datetime_ru(string, date_now, default_time):
 
     def calculate_dt():
         nonlocal date_now, offset
+        print(offset)
         years = offset['years']
-        delta_args = {name: value for name,
-                      value in offset.items() if name != 'years'}
-        return date_now + timedelta(**delta_args)
+        months = offset['months']
+        delta_args_pos = {name: value for name,
+                          value in offset.items() if name not in ['years', 'months']
+                          and value != None and value > 0}
+        result = date_now + timedelta(**delta_args_pos)
+        print(delta_args_pos)
+        print(result)
+        delta_args_neg = {name: value for name,
+                          value in offset.items() if name not in ['years', 'months']
+                          and value != None and value < 0}
+        result = result - timedelta(**delta_args_neg)
+        print(delta_args_neg)
+        print(result)
+        if years is not None:
+            if years > 0:
+                result += relativedelta(years=years)
+            else:
+                result -= relativedelta(years=abs(years))
+        if months is not None:
+            if months > 0:
+                result += relativedelta(months=months)
+            else:
+                result -= relativedelta(months=abs(months))
+        return result
 
-    extractors = [_extract_now, _extract_interval]
+    extractors = [_extract_now, _extract_interval, _extract_next_term]
     for function in extractors:
         result = function(words, date_now)
         if result is not None:
             update_offset(result[0])
             strip_words(result[1])
             if result[2]:
-                return [calculate_dt(), " ".join(words)]
-    return [calculate_dt(), " ".join[words]]
+                break
+    result = calculate_dt()
+    times = ['microseconds',
+            #  'milliseconds',
+             'seconds',
+             'minutes',
+             'hours']
+    time_set = len([offset[value] for value in times if offset[value] is not None]) != 0
+    if not time_set:
+        for interval in times:
+            if offset[interval] is None:
+                result = result.replace(**{interval[:-1]: 0})
 
+    if default_time is not None and not time_set:
+        result = result.replace(hour=default_time.hour,
+                       minute=default_time.minute, second=default_time.second)
+    return [result, " ".join(words)]
 
 def normalize_ru(text, remove_articles=True):
     """
