@@ -446,16 +446,21 @@ def _extract_interval(words, current_dt):
     time_words_r = _revert_dict(time_words)
 
     last_index = 0
+    prev_time_word = 0
 
     for index, word in enumerate(norm_words):
         if word in time_words_r:
             last_index = index
             parsed_positions.append(index)
             number_words = []
-            for rev_idx in range(index - 1, -1, -1):
+            for rev_idx in range(index - 1, prev_time_word, -1):
                 if not _is_plain_word(norm_words[rev_idx]):
                     number_words.append(norm_words[rev_idx])
                     parsed_positions.append(rev_idx)
+            # remove "и" between terms
+            if len(words) > prev_time_word + 2 and words[prev_time_word + 1] == "и":
+                parsed_positions.append(prev_time_word + 1)
+
             number = extractnumber_ru(" ".join(number_words))
 
             if number is False:
@@ -471,6 +476,8 @@ def _extract_interval(words, current_dt):
                 offset['seconds'] = offset.get('seconds', 0) + number * 60
             else:
                 offset[time_words_r[word]] = offset.get(time_words_r[word], 0) + number
+            prev_time_word = index
+
 
     if len(norm_words) > last_index + 1 and norm_words[last_index + 1] == 'после':
         parsed_positions.append(last_index + 1)
