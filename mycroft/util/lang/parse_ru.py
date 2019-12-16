@@ -538,62 +538,162 @@ def _extract_next_term(words, current_dt):
 
 def _extract_weekday(words, current_dt):
 
-    weekdays = {'monday': ["понедельник", "понедельника", "понедельнику"],
-                'tuesday': ["вторник", "вторника", "вторнику"],
-                'wednsday': ["среда", "среду", "среды"],
-                'thursday': ["четверг", "четверга", "четвергу"],
-                'friday': ["пятница", "пятницу", "пятницы"],
-                'saturday': ["суббота", "субботу", "субботы"],
-                'sunday': ["воскресенье", "воскресенья", "воскресенью"]}
+    weekdays = {1: ["понедельник", "понедельника", "понедельнику"],
+                2: ["вторник", "вторника", "вторнику"],
+                3: ["среда", "среду", "среды"],
+                4: ["четверг", "четверга", "четвергу"],
+                5: ["пятница", "пятницу", "пятницы"],
+                6: ["суббота", "субботу", "субботы"],
+                7: ["воскресенье", "воскресенья", "воскресенью"]}
 
-    offsets = {-2: ["позапрошлый", "позапрошлого", "позапрошлому"],
-               -1: ["прошлый", "прошлого", "прошлому"],
+    offsets = {-2: ["позапрошлый", "позапрошлого", "позапрошлому", "позапрошлой"],
+               -1: ["прошлый", "прошлого", "прошлому", "прошлой"],
                0: ["этот"],
-               1: ["следующий", "следующая", "следующую"]}
+               1: ["следующий", "следующая", "следующую", "следующей", "следующего"]}
 
+    weekdays_r = _revert_dict(weekdays)
+    offsets_r = _revert_dict(offsets)
 
-    offset = dict()
+    if not set(weekdays_r).intersection(set(words)):
+        return None
+    
+    for num, word in enumerate(words):
+        if word in weekdays_r:
+            current_day = int(current_dt.strftime('%w'))
+            parsed_day = weekdays_r[word]
+            days_offset = parsed_day - current_day
+            if num > 0 and words[num-1] in offsets_r:
+                week_offset = offsets_r[words[num-1]]
+            else:
+                week_offset = None
+            break
+    
+    if week_offset is None:
+        if days_offset < 0:
+            days_offset += 7
+        return ({'days': days_offset}, [num], False)
+    else:
+        print(num, days_offset, week_offset, "seems like we parsing next word")
+        # days_offset += 7 * week_offset
+        return ({'days': days_offset, 'weeks': week_offset}, [num-1, num], False)
+    
 
-
-def _extract_relative_day(tokens):
+def _extract_relative_day(words, current_dt):
     offsets = {"позавчера": -2,
                "вчера": -1,
                "сегодня": 0,
                "завтра": 1,
                "послезавтра": 2}
-    string = " ".join([token.word for token in tokens])
-    for of_word in offset_words:
-        if of_word in string:
-            break
-    else:
-        return None
-    result = offset_words[of_word]
-    if len(of_word.split()) != 1:
-        parsed = of_word.split()
-    else:
-        parsed = [of_word]
-    for word in parsed:
-        for num, token in enumerate(tokens):
-            if word == token.word:
-                tokens.pop(num)
-                break
-    return result
 
+    for num, word in enumerate(words):
+        if word in offsets:
+            return ({'days': offsets[word]}, [num], False) 
+    return None
 
 def _extract_pronoun_time(tokens):
     # двадцать часов пятнадцать минут
     pass
 
+def _time_to_offset(parsed_dt, current_dt):
+    if parsed_dt > current_dt:
+        delta = parsed_dt - current_dt
+        minus = False
+    else:
+        delta = current_dt - parsed_dt
+        minus = True
+    hours, seconds = divmod(delta.seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    if minus:
+        hours *= -1
+        minutes *= -1
+    return {'hours': hours,'minutes': minutes, 'seconds': seconds}
+
+
+def _extract_short_pron_time(words, current_dt):
+
+    preamble_words = ['в', 'на']
+
+    for num, word in enumerate(words):
+        parsed_positions = []
+        hour = minute = 0
+        next_word = words[num+1] if num + 1 < len(words) else ""
+        next_next_word = words[num+2] if num + 2 < len(words) else ""
+        hour = extractnumber_ru(word)
+        if hour is not False and not 0<=hour<=23:
+            continue
+        parsed_positions.append(num)
+        
+        minute1 = extractnumber_ru(next_word)
+        minute2 = extractnumber_ru(next_next_word)
+        if minute1 is not False and minute2 is not False and minute1 == 0 and 0 <= minute2 <= 9:
+            minute = minute2
+            parsed_positions.extend([num+1, num+2])
+        elif 10 <= minute1 <= 19:
+            minute = minute1
+            parsed_positions.append(num+1)
+        elif 20 <= minute1 <=50 and minute2 and 1 <= minute2 <= 9:
+            minute = minute1 + minute2
+            parsed_positions.extend([num+1, num+2])
+        else:
+            continue
+        if num > 0 and words[num-1] in preamble_words:
+            parsed_positions.append(num-1)
+        parsed_time = current_dt.replace(hour=hour, minute=minute) 
+        offset = _time_to_offset(parsed_time, current_dt)
+        return (offset, parsed_positions, True)
 
 def _extract_short_pronoun_time(tokens):
     # пять [пятнадцать] [утра]
     pass
 
 
-def _extract_numeric_time(tokens):
+def _extract_numeric_time(words, current_dt):
     # 15:25
-    pass
+    
+    preamble_words = ['в', 'на']
+    parsed_positions = []
 
+    for num, word in enumerate(words):
+        try:
+            hours, minutes = word.split(":")
+            hours = int(hours)
+            minutes = int(minutes)
+        except ValueError:
+            continue
+        if 0 <= hours <= 23 and 0 <= minutes <= 59:
+            break
+    else:
+        return None
+    parsed_time = current_dt.replace(hour=hours, minute=minutes)
+    offset = _time_to_offset(parsed_time, current_dt)
+    parsed_positions.append(num)
+    if num > 0 and words[num-1] in preamble_words:
+        parsed_positions.append(num-1)
+    return(offset, parsed_positions, True)
+
+def _extract_daytime(words, current_dt):
+
+    daytimes = {8: ['утро', 'утром', 'утру'],
+                12: ['полдень', 'полудню'],
+                15: ['обед', 'обеду', 'обеда'],
+                19: ['вечером', 'вечеру', 'вечер'],
+                0: ['полночь', 'полуночи']}
+    
+    preamble_words = ['в', 'к', 'после', 'этот', 'этим']
+    prepreamble_words = ['точно', 'ровно']
+
+    daytimes_r = _revert_dict(daytimes)
+
+    for num, word in enumerate(words):
+        if word in daytimes_r:
+            parsed_positions = [num]
+            parsed_time = current_dt.replace(hour=daytimes_r[word], minute=0)
+            offset = _time_to_offset(parsed_time, current_dt)
+            if num > 0 and words[num-1] in preamble_words:
+                parsed_positions.append(num-1)
+                if num > 1 and words[num-2] in prepreamble_words:
+                    parsed_positions.append(num-2)
+            return (offset, parsed_positions, True)
 
 def extract_datetime_ru(string, date_now, default_time):
     """ Convert a human date reference into an exact datetime
@@ -643,8 +743,11 @@ def extract_datetime_ru(string, date_now, default_time):
 
     def update_offset(off):
         nonlocal offset
+        print(offset, off)
         for t in offset:
+            print(t)
             if t not in off:
+                print(t, "not in off")
                 continue
             if offset[t] is not None:
                 offset[t] += off[t]
@@ -666,7 +769,7 @@ def extract_datetime_ru(string, date_now, default_time):
         result = date_now + timedelta(**delta_args_pos)
         print(delta_args_pos)
         print(result)
-        delta_args_neg = {name: value for name,
+        delta_args_neg = {name: -value for name,
                           value in offset.items() if name not in ['years', 'months']
                           and value != None and value < 0}
         result = result - timedelta(**delta_args_neg)
@@ -684,12 +787,16 @@ def extract_datetime_ru(string, date_now, default_time):
                 result -= relativedelta(months=abs(months))
         return result
 
-    extractors = [_extract_now, _extract_interval, _extract_next_term]
+    extractors = [_extract_now, _extract_interval, _extract_next_term,
+                  _extract_weekday, _extract_relative_day, _extract_short_pron_time, _extract_numeric_time,
+                  _extract_daytime]
     for function in extractors:
         result = function(words, date_now)
         if result is not None:
             update_offset(result[0])
             strip_words(result[1])
+            print("offset became", offset)
+            print("words rest became", words)
             if result[2]:
                 break
     result = calculate_dt()
