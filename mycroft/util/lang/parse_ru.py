@@ -397,9 +397,77 @@ def _extract_now(words, current_dt):
         return None
 
 
-def _extract_absolute_date(tokens):
+def _extract_absolute_date(words, current_dt):
     # 3е декабря
-    pass
+
+    months = {1: ["январь", "января", "январе", "январю"],
+              2: ["февраль", "февраля", "феврале", "февралю"],
+              3: ["март", "марта", "марте", "марту"],
+              4: ["апрель", "апреля", "апреле", "апрелю"],
+              5: ["май", "мая", "мае", "маю"],
+              6: ["июнь","июня","июне","июню"],
+              7: ["июль","июля","июле","июлю"],
+              8: ["август", "августа","августе","августу",],
+              9: ["сентябрь", "сентября", "сентябре", "сентябрю"],
+              10: ["октябрь", "октября", "октябре", "октябрю"],
+              11: ["ноябрь", "ноября", "ноябре", "ноябрю"],
+              12: ["декабрь", "декабря", "декабре", "декабрю"]}
+
+    months_r = _revert_dict(months)
+
+    # normalize numbers
+    norm_words = []
+    for word in words:
+        if len(word) > 1 and is_numeric(word[0]) and word[-1] in ['о', 'е', 'у']:
+            num = ""
+            for letter in word:
+                if is_numeric(letter):
+                    num += letter
+            norm_words.append(num)
+        else:
+            norm_words.append(word)
+    
+    parsed_positions = []
+    offset = dict()
+    day = month = year = None
+    for num, word in enumerate(norm_words):
+        if word in months_r:
+            # check if it is day before
+            parsed_positions.append(num)
+            month = months_r[word]
+            if num > 0 and _is_subthousand(norm_words[num-1]):
+                day_txt = norm_words[num-1]
+                parsed_positions.append(num-1)
+                if num > 1 and _is_subthousand(norm_words[num-2]):
+                    # check if it is part of one number
+                    if _is_subthousand(norm_words[num-2]) and not _different_numbers(words[num-2], word[num-1], ordinals=True) and extractnumber_ru(" ".join((words[num-2], words[num-1]))) <= 31:
+                        day_txt += " " + norm_words[num-2]
+                        parsed_positions.append(num-2)
+                day = extractnumber_ru(day_txt)
+            # check if it is a full year after
+            # first check numeric year
+            if len(norm_words) > num + 1 and is_numeric(norm_words[num+1]) and len(norm_words[num+1]) == 4:
+                year = extractnumber_ru(norm_words[num+1])
+                parsed_positions.append(num + 1)
+            break
+    else:
+        return None
+
+
+    cur_year=int(current_dt.strftime("%Y"))
+    cur_month=int(current_dt.strftime("%m"))
+    cur_day=int(current_dt.strftime("%d"))
+    
+    print("parsed:", year, month, day, "curr", cur_year, cur_month, cur_day)
+    if year is not None:
+        offset['years'] = year - cur_year
+    if day is not None:
+        offset['days'] = day - cur_day
+    offset['months'] = month - cur_month
+
+    return (offset, parsed_positions, False)
+
+    
 
 
 def _extract_interval(words, current_dt):
@@ -795,7 +863,7 @@ def extract_datetime_ru(string, date_now, default_time):
         return result
 
     extractors = [_extract_now, _extract_interval, _extract_next_term,
-                  _extract_weekday, _extract_relative_day, _extract_short_pron_time, _extract_numeric_time,
+                  _extract_weekday, _extract_relative_day,_extract_absolute_date, _extract_short_pron_time, _extract_numeric_time,
                   _extract_daytime]
     for function in extractors:
         result = function(words, date_now)
