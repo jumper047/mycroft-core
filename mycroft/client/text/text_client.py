@@ -14,7 +14,6 @@
 #
 import sys
 import io
-import signal
 from math import ceil
 
 from .gui_server import start_qml_gui
@@ -63,7 +62,7 @@ log_lock = Lock()
 max_log_lines = 5000
 mergedLog = []
 filteredLog = []
-default_log_filters = ["mouth.viseme", "mouth.display", "mouth.icon", "DEBUG"]
+default_log_filters = ["mouth.viseme", "mouth.display", "mouth.icon"]
 log_filters = list(default_log_filters)
 log_files = []
 find_str = None
@@ -121,9 +120,6 @@ def ctrl_c_pressed():
         return False
 
 
-signal.signal(signal.SIGINT, ctrl_c_handler)
-
-
 ##############################################################################
 # Helper functions
 
@@ -179,7 +175,8 @@ def load_settings():
         with io.open(config_file, 'r') as f:
             config = json.load(f)
         if "filters" in config:
-            log_filters = config["filters"]
+            # Disregard the filtering of DEBUG messages
+            log_filters = [f for f in config["filters"] if f != "DEBUG"]
         if "cy_chat_area" in config:
             cy_chat_area = config["cy_chat_area"]
         if "show_last_key" in config:
@@ -1322,7 +1319,11 @@ def gui_main(stdscr):
                     # Treat this as an utterance
                     bus.emit(Message("recognizer_loop:utterance",
                                      {'utterances': [line.strip()],
-                                      'lang': config.get('lang', 'en-us')}))
+                                      'lang': config.get('lang', 'en-us')},
+                                     {'client_name': 'mycroft_cli',
+                                      'source': 'debug_cli',
+                                      'destination': ["skills"]}
+                                     ))
                 hist_idx = -1
                 line = ""
             elif code == 16 or code == 545:  # Ctrl+P or Ctrl+Left (Previous)
@@ -1412,7 +1413,10 @@ def simple_cli():
             print("Input (Ctrl+C to quit):")
             line = sys.stdin.readline()
             bus.emit(Message("recognizer_loop:utterance",
-                             {'utterances': [line.strip()]}))
+                             {'utterances': [line.strip()]},
+                             {'client_name': 'mycroft_simple_cli',
+                              'source': 'debug_cli',
+                              'destination': ["skills"]}))
     except KeyboardInterrupt as e:
         # User hit Ctrl+C to quit
         print("")

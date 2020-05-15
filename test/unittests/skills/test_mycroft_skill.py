@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+#
 # Copyright 2017 Mycroft AI Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,7 +73,7 @@ class TestFunction(unittest.TestCase):
 
         test_class = T()
         self.assertTrue('resting_handler' in dir(test_class.f))
-        self.assertEquals(test_class.f.resting_handler, 'humbug')
+        self.assertEqual(test_class.f.resting_handler, 'humbug')
 
 
 class TestMycroftSkill(unittest.TestCase):
@@ -412,8 +412,8 @@ class TestMycroftSkill(unittest.TestCase):
         check_set_context(expected)
 
         # UTF-8 context
-        s.set_context(u'Smörgåsbord€15')
-        expected = [{'context': u'ASmörgåsbord€15', 'origin': '', 'word': ''}]
+        s.set_context('Smörgåsbord€15')
+        expected = [{'context': 'ASmörgåsbord€15', 'origin': '', 'word': ''}]
         check_set_context(expected)
 
         self.emitter.reset()
@@ -551,6 +551,56 @@ class TestMycroftSkill(unittest.TestCase):
         self.assertFalse(s.voc_match("switch", "turn_off_test"))
         self.assertFalse(s.voc_match("My hovercraft is full of eels",
                                      "turn_off_test"))
+
+    def test_translate_locations(self):
+        """Assert that the a translatable list can be loaded from dialog and
+        locale.
+        """
+        # Check that translatables can be loaded from the dialog directory
+        s = SimpleSkill1()
+        s.root_dir = abspath(join(dirname(__file__),
+                                  'translate', 'in-dialog/'))
+        lst = s.translate_list('good_things')
+        self.assertTrue(isinstance(lst, list))
+        vals = s.translate_namedvalues('named_things')
+        self.assertTrue(isinstance(vals, dict))
+        template = s.translate_template('test',
+                                        data={'thing': 'test framework'})
+        self.assertEqual(template,
+                         ['Oh look it\'s my favourite test framework'])
+        # Check that translatables can be loaded from locale folder
+        s = SimpleSkill1()
+        s.root_dir = abspath(join(dirname(__file__),
+                                  'translate', 'in-locale'))
+        lst = s.translate_list('good_things')
+        self.assertTrue(isinstance(lst, list))
+        vals = s.translate_namedvalues('named_things')
+        self.assertTrue(isinstance(vals, dict))
+        template = s.translate_template('test',
+                                        data={'thing': 'test framework'})
+        self.assertEqual(template,
+                         ['Oh look it\'s my favourite test framework'])
+
+        # Check loading in a non-en-us language
+        s = SimpleSkill1()
+        s.config_core['lang'] = 'de-de'
+        s.root_dir = abspath(join(dirname(__file__),
+                                  'translate', 'in-locale'))
+        lst = s.translate_list('good_things')
+        self.assertEqual(lst, ['sonne', 'mycroft', 'zahne'])
+        vals = s.translate_namedvalues('named_things')
+        self.assertEqual(vals['blau'], '2')
+        template = s.translate_template('test',
+                                        data={'thing': 'test framework'})
+        self.assertEqual(template,
+                         ['Aber setzen sie sich herr test framework'])
+
+        # Check fallback to english
+        lst = s.translate_list('not_in_german')
+        self.assertEqual(lst, ['not', 'in', 'German'])
+
+        # Restore lang to en-us
+        s.config_core['lang'] = 'en-us'
 
 
 class _TestSkill(MycroftSkill):

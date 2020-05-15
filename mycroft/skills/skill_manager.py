@@ -15,9 +15,10 @@
 """Load, update and manage skills on this device."""
 import os
 from glob import glob
-from threading import Thread, Event
-from time import sleep, time
+from threading import Thread, Event, Lock
+from time import sleep, time, monotonic
 
+from mycroft.api import is_paired
 from mycroft.enclosure.api import EnclosureAPI
 from mycroft.configuration import Configuration
 from mycroft.messagebus.message import Message
@@ -28,6 +29,82 @@ from .skill_loader import SkillLoader
 from .skill_updater import SkillUpdater
 
 SKILL_MAIN_MODULE = '__init__.py'
+
+
+class UploadQueue:
+    """Queue for holding loaders with data that still needs to be uploaded.
+
+    This queue can be used during startup to capture all loaders
+    and then processing can be triggered at a later stage when the system is
+    connected to the backend.
+
+    After all queued settingsmeta has been processed and the queue is empty
+    the queue will set the self.started flag.
+    """
+    def __init__(self):
+        self._queue = []
+        self.started = False
+        self.lock = Lock()
+
+    def start(self):
+        """Start processing of the queue."""
+        self.started = True
+        self.send()
+
+    def stop(self):
+        """Stop the queue, and hinder any further transmissions."""
+        self.started = False
+
+    def send(self):
+        """Loop through all stored loaders triggering settingsmeta upload."""
+        with self.lock:
+            queue = self._queue
+            self._queue = []
+        if queue:
+            LOG.info('New Settings meta to upload.')
+            for loader in queue:
+                if self.started:
+                    loader.instance.settings_meta.upload()
+                else:
+                    break
+
+    def __len__(self):
+        return len(self._queue)
+
+    def put(self, loader):
+        """Append a skill loader to the queue.
+
+        If a loader is already present it's removed in favor of the new entry.
+        """
+        if self.started:
+            LOG.info('Updating settings meta during runtime...')
+        with self.lock:
+            # Remove existing loader
+            self._queue == [e for e in self._queue if e != loader]
+            self._queue.append(loader)
+
+
+def _shutdown_skill(instance):
+    """Shutdown a skill.
+
+    Call the default_shutdown method of the skill, will produce a warning if
+    the shutdown process takes longer than 1 second.
+
+    Arguments:
+        instance (MycroftSkill): Skill instance to shutdown
+    """
+    try:
+        ref_time = monotonic()
+        # Perform the shutdown
+        instance.default_shutdown()
+
+        shutdown_time = monotonic() - ref_time
+        if shutdown_time > 1:
+            LOG.warning('{} shutdown took {} seconds'.format(instance.skill_id,
+                                                             shutdown_time))
+    except Exception:
+        LOG.exception('Failed to shut down skill: '
+                      '{}'.format(instance.skill_id))
 
 
 class SkillManager(Thread):
@@ -44,6 +121,7 @@ class SkillManager(Thread):
         self._stop_event = Event()
         self._connected_event = Event()
         self.config = Configuration.get()
+        self.upload_queue = UploadQueue()
 
         self.skill_loaders = {}
         self.enclosure = EnclosureAPI(bus)
@@ -106,9 +184,17 @@ class SkillManager(Thread):
     def schedule_now(self, _):
         self.skill_updater.next_download = time() - 1
 
+    def _start_settings_update(self):
+        LOG.info('Start settings update')
+        self.skill_updater.post_manifest(reload_skills_manifest=True)
+        self.upload_queue.start()
+        LOG.info('All settings meta has been processed or upload has started')
+        self.settings_downloader.download()
+        LOG.info('Skill settings downloading has started')
+
     def handle_paired(self, _):
         """Trigger upload of skills manifest after pairing."""
-        self.skill_updater.post_manifest(reload_skills_manifest=True)
+        self._start_settings_update()
 
     def load_priority(self):
         skills = {skill.name: skill for skill in self.msm.all_skills}
@@ -123,7 +209,9 @@ class SkillManager(Thread):
                         log_msg = 'Downloading priority skill: {} failed'
                         LOG.exception(log_msg.format(skill_name))
                         continue
-                self._load_skill(skill.path)
+                loader = self._load_skill(skill.path)
+                if loader:
+                    self.upload_queue.put(loader)
             else:
                 LOG.error(
                     'Priority skill {} can\'t be found'.format(skill_name)
@@ -137,9 +225,9 @@ class SkillManager(Thread):
         self._connected_event.wait()
         self._load_on_startup()
 
-        # Update sync backend and skills.
-        self.skill_updater.post_manifest(reload_skills_manifest=True)
-        self.settings_downloader.download()
+        # Sync backend and skills.
+        if is_paired() and not self.upload_queue.started:
+            self._start_settings_update()
 
         # Scan the file folder that contains Skills.  If a Skill is updated,
         # unload the existing version from memory and reload from the disk.
@@ -149,6 +237,12 @@ class SkillManager(Thread):
                 self._load_new_skills()
                 self._unload_removed_skills()
                 self._update_skills()
+                if (is_paired() and self.upload_queue.started and
+                        len(self.upload_queue) > 0):
+                    self.msm.clear_cache()
+                    self.skill_updater.post_manifest()
+                    self.upload_queue.send()
+
                 sleep(2)  # Pause briefly before beginning next scan
             except Exception:
                 LOG.exception('Something really unexpected has occured '
@@ -172,35 +266,35 @@ class SkillManager(Thread):
 
     def _reload_modified_skills(self):
         """Handle reload of recently changed skill(s)"""
-        reload_occured = False
         for skill_dir in self._get_skill_directories():
             try:
                 skill_loader = self.skill_loaders.get(skill_dir)
                 if skill_loader is not None and skill_loader.reload_needed():
-                    skill_loader.reload()
-                    reload_occured = True
+                    # If reload succeed add settingsmeta to upload queue
+                    if skill_loader.reload():
+                        self.upload_queue.put(skill_loader)
             except Exception:
                 LOG.exception('Unhandled exception occured while '
                               'reloading {}'.format(skill_dir))
-
-        if reload_occured:
-            # If a reload occured a skill gid may have changed.
-            self.skill_updater.post_manifest(reload_skills_manifest=True)
 
     def _load_new_skills(self):
         """Handle load of skills installed since startup."""
         for skill_dir in self._get_skill_directories():
             if skill_dir not in self.skill_loaders:
-                self._load_skill(skill_dir)
+                loader = self._load_skill(skill_dir)
+                if loader:
+                    self.upload_queue.put(loader)
 
     def _load_skill(self, skill_directory):
         skill_loader = SkillLoader(self.bus, skill_directory)
         try:
-            skill_loader.load()
+            load_status = skill_loader.load()
         except Exception:
             LOG.exception('Load of skill {} failed!'.format(skill_directory))
         finally:
             self.skill_loaders[skill_directory] = skill_loader
+
+        return skill_loader if load_status else None
 
     def _get_skill_directories(self):
         skill_glob = glob(os.path.join(self.msm.skills_dir, '*/'))
@@ -231,6 +325,11 @@ class SkillManager(Thread):
             except Exception:
                 LOG.exception('Failed to shutdown skill ' + skill.id)
             del self.skill_loaders[skill_dir]
+
+        # If skills were removed make sure to update the manifest on the
+        # mycroft backend.
+        if removed_skills:
+            self.skill_updater.post_manifest(reload_skills_manifest=True)
 
     def _update_skills(self):
         """Update skills once an hour if update is enabled"""
@@ -309,16 +408,12 @@ class SkillManager(Thread):
         """Tell the manager to shutdown."""
         self._stop_event.set()
         self.settings_downloader.stop_downloading()
+        self.upload_queue.stop()
 
         # Do a clean shutdown of all skills
         for skill_loader in self.skill_loaders.values():
             if skill_loader.instance is not None:
-                try:
-                    skill_loader.instance.default_shutdown()
-                except Exception:
-                    LOG.exception(
-                        'Failed to shut down skill: ' + skill_loader.skill_id
-                    )
+                _shutdown_skill(skill_loader.instance)
 
     def handle_converse_request(self, message):
         """Check if the targeted skill id can handle conversation
@@ -337,7 +432,10 @@ class SkillManager(Thread):
                     self._emit_converse_error(message, skill_id, error_message)
                     break
                 try:
-                    self._emit_converse_response(message, skill_loader)
+                    utterances = message.data['utterances']
+                    lang = message.data['lang']
+                    result = skill_loader.instance.converse(utterances, lang)
+                    self._emit_converse_response(result, message, skill_loader)
                 except Exception:
                     error_message = 'exception in converse method'
                     LOG.exception(error_message)
@@ -350,16 +448,17 @@ class SkillManager(Thread):
             self._emit_converse_error(message, skill_id, error_message)
 
     def _emit_converse_error(self, message, skill_id, error_msg):
-        reply = message.reply(
-            'skill.converse.error',
-            data=dict(skill_id=skill_id, error=error_msg)
-        )
+        """Emit a message reporting the error back to the intent service."""
+        reply = message.reply('skill.converse.response',
+                              data=dict(skill_id=skill_id, error=error_msg))
+        self.bus.emit(reply)
+        # Also emit the old error message to keep compatibility
+        # TODO Remove in 20.08
+        reply = message.reply('skill.converse.error',
+                              data=dict(skill_id=skill_id, error=error_msg))
         self.bus.emit(reply)
 
-    def _emit_converse_response(self, message, skill_loader):
-        utterances = message.data['utterances']
-        lang = message.data['lang']
-        result = skill_loader.instance.converse(utterances, lang)
+    def _emit_converse_response(self, result, message, skill_loader):
         reply = message.reply(
             'skill.converse.response',
             data=dict(skill_id=skill_loader.skill_id, result=result)
